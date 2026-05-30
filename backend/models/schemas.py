@@ -12,6 +12,7 @@ class Product(BaseModel):
     image_url: str
     merchant_domain: str
     merchant_url: str
+    checkout_url: str | None = None
 
 
 class ScanResponse(BaseModel):
