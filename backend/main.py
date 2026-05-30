@@ -1,13 +1,12 @@
+import uuid
 from contextlib import asynccontextmanager
-from pathlib import Path
 
-from fastapi import BackgroundTasks, Depends, FastAPI, File, Header, HTTPException, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
-from config import settings
 from database import get_cart, init_db, save_cart
 from models.schemas import HealthResponse, LoginRequest, LoginResponse, ScanResponse
-from services.pipeline import run_scan, save_upload
+from services.pipeline import run_scan
 
 # In-memory scan jobs for optional async processing (demo: sync by default)
 _scan_jobs: dict[str, ScanResponse] = {}
@@ -15,7 +14,6 @@ _scan_jobs: dict[str, ScanResponse] = {}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    settings.upload_path.mkdir(parents=True, exist_ok=True)
     await init_db()
     yield
 
@@ -49,26 +47,25 @@ async def scan(
     authorization: str | None = Header(default=None),
     async_mode: bool = False,
 ):
-    suffix = Path(file.filename or "capture.jpg").suffix or ".jpg"
     contents = await file.read()
-    image_path = save_upload(contents, settings.upload_path, suffix=suffix)
+    mime_type = file.content_type or "image/jpeg"
 
     user_id = _user_id_from_auth(authorization)
 
     if async_mode:
-        job_id = image_path.stem
+        job_id = uuid.uuid4().hex
         _scan_jobs[job_id] = ScanResponse(status="processing")
 
         async def _process():
-            result = await run_scan(image_path)
+            result = await run_scan(contents, mime_type)
             _scan_jobs[job_id] = result
             if result.status == "ready":
                 await save_cart(user_id, result)
 
         background_tasks.add_task(_process)
-        return ScanResponse(status="processing")
+        return ScanResponse(status="processing", cart_id=job_id)
 
-    result = await run_scan(image_path)
+    result = await run_scan(contents, mime_type)
     if result.status == "ready":
         await save_cart(user_id, result)
     return result

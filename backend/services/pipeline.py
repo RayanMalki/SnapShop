@@ -1,21 +1,28 @@
-from pathlib import Path
-import uuid
-
 from models.schemas import Product, ScanResponse
 from services import ucp, vision
 
 
-async def run_scan(image_path: Path) -> ScanResponse:
-    vision_result = await vision.analyze_image(image_path)
-    search_query = vision_result.get("search_query") or "clothing item"
+async def run_scan(image_bytes: bytes, mime_type: str = "image/jpeg") -> ScanResponse:
+    vision_result = await vision.analyze_image_bytes(image_bytes, mime_type)
+
+    query_precise = vision_result.get("query_precise") or ""
+    query_broad = vision_result.get("query_broad") or ""
+    search_query = query_precise or query_broad or "clothing item"
     summary = vision_result.get("summary") or search_query
 
+    # Recherche UCP : on tente la requête précise, puis on retombe sur la
+    # requête large (sans marque / attributs incertains) si rien ne sort.
     product: Product | None = await ucp.search_catalog(search_query)
+    if not product and query_broad and query_broad != search_query:
+        product = await ucp.search_catalog(query_broad)
+        search_query = query_broad
+
     if not product:
         return ScanResponse(
             status="error",
             vision_summary=summary,
             search_query=search_query,
+            vision=vision_result,
             error="No product found from UCP search",
         )
 
@@ -29,6 +36,7 @@ async def run_scan(image_path: Path) -> ScanResponse:
             status="error",
             vision_summary=summary,
             search_query=search_query,
+            vision=vision_result,
             product=product,
             error=str(exc),
         )
@@ -37,14 +45,8 @@ async def run_scan(image_path: Path) -> ScanResponse:
         status="ready",
         vision_summary=summary,
         search_query=search_query,
+        vision=vision_result,
         product=product,
         continue_url=continue_url,
         cart_id=cart_id,
     )
-
-
-def save_upload(contents: bytes, upload_dir: Path, suffix: str = ".jpg") -> Path:
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    path = upload_dir / f"{uuid.uuid4().hex}{suffix}"
-    path.write_bytes(contents)
-    return path
