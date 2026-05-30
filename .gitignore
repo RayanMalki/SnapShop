@@ -1,4 +1,5 @@
 .env
+.venv/
 backend/.venv/
 backend/data/
 backend/uploads/
