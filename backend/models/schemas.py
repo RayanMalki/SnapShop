@@ -19,9 +19,7 @@ class ScanResponse(BaseModel):
     status: Literal["processing", "ready", "error"]
     vision_summary: str | None = None
     search_query: str | None = None
-    product: Product | None = None
-    continue_url: str | None = None
-    cart_id: str | None = None
+    products: list[Product] = Field(default_factory=list)
     error: str | None = None
 
 

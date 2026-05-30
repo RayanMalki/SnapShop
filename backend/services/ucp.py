@@ -28,18 +28,6 @@ CATALOG_MCP_URL = "https://catalog.shopify.com/api/ucp/mcp"
 # until we host our own at https://snapshop.dev/.well-known/ucp-agent.json.
 DEFAULT_AGENT_PROFILE_URL = "https://www.igvita.com/ucp/profile.json"
 
-_MOCK_PRODUCT = Product(
-    variant_id="gid://shopify/ProductVariant/41293818167385",
-    title="Sony WH-CH520 Wireless Bluetooth Headphones (mock)",
-    price_min=5999,
-    price_max=5999,
-    currency="USD",
-    image_url="https://placehold.co/512x512/png?text=Mock+Product",
-    merchant_domain="audiogear.example.com",
-    merchant_url="https://audiogear.example.com",
-    checkout_url="https://audiogear.example.com/cart/41293818167385:1",
-)
-
 
 def _agent_profile_url() -> str:
     return settings.ucp_agent_profile_url or DEFAULT_AGENT_PROFILE_URL
@@ -138,18 +126,14 @@ class MCPClient:
 # ---------------------------------------------------------------------------
 
 
-async def search_catalog(query: str) -> Product | None:
-    """Search the Shopify global catalog and return the top product."""
-    if settings.use_mock_ucp:
-        logger.info("UCP mock mode — returning placeholder product for %r", query)
-        return _MOCK_PRODUCT
-
+async def search_catalog(query: str, *, limit: int = 8) -> list[Product]:
+    """Search the Shopify global catalog and return up to ``limit`` candidates."""
     arguments = {
         "meta": {"ucp-agent": {"profile": _agent_profile_url()}},
         "catalog": {
             "query": query,
             "context": {"address_country": "US"},
-            "pagination": {"limit": 5},
+            "pagination": {"limit": limit},
         },
     }
 
@@ -157,13 +141,13 @@ async def search_catalog(query: str) -> Product | None:
         async with MCPClient(CATALOG_MCP_URL) as client:
             result = await client.call_tool("search_catalog", arguments)
     except Exception:
-        logger.exception("UCP search_catalog failed; falling back to mock")
-        return _MOCK_PRODUCT
+        logger.exception("UCP search_catalog failed for %r", query)
+        return []
 
-    product = _first_product(result)
-    if product is None:
-        logger.warning("UCP search returned no products for %r", query)
-    return product
+    products = _parse_products(result)
+    if not products:
+        logger.info("UCP search returned no products for %r", query)
+    return products
 
 
 async def create_cart(variant_id: str, merchant_url: str) -> tuple[str, str]:
@@ -190,13 +174,22 @@ async def create_cart(variant_id: str, merchant_url: str) -> tuple[str, str]:
 # ---------------------------------------------------------------------------
 
 
-def _first_product(tool_result: dict[str, Any]) -> Product | None:
+def _parse_products(tool_result: dict[str, Any]) -> list[Product]:
     structured = _structured_content(tool_result)
-    products = structured.get("products") if structured else None
-    if not products:
-        return None
+    raw_products = structured.get("products") if structured else None
+    if not raw_products:
+        return []
+    parsed: list[Product] = []
+    for raw in raw_products:
+        product = _product_from_raw(raw)
+        if product is not None:
+            parsed.append(product)
+    return parsed
 
-    raw = products[0]
+
+def _product_from_raw(raw: dict[str, Any]) -> Product | None:
+    if not isinstance(raw, dict):
+        return None
     variants = raw.get("variants") or []
     variant = variants[0] if variants else {}
 
@@ -317,12 +310,7 @@ if __name__ == "__main__":  # pragma: no cover
 
     async def _main() -> None:
         query = " ".join(sys.argv[1:]) or "wireless headphones under $100"
-        prev = settings.use_mock_ucp
-        settings.use_mock_ucp = False
-        try:
-            product = await search_catalog(query)
-        finally:
-            settings.use_mock_ucp = prev
-        print(json.dumps(product.model_dump() if product else None, indent=2))
+        products = await search_catalog(query)
+        print(json.dumps([p.model_dump() for p in products], indent=2))
 
     asyncio.run(_main())
