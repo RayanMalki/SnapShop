@@ -1,0 +1,9 @@
+.env
+backend/.venv/
+backend/data/
+backend/uploads/
+__pycache__/
+*.pyc
+ios/**/DerivedData/
+ios/**/xcuserdata/
+.DS_Store

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Snap &amp; Shop — Phase 1</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        font-family: system-ui, -apple-system, sans-serif;
+        max-width: 640px;
+        margin: 2rem auto;
+        padding: 0 1rem;
+        background: #0f0f12;
+        color: #f4f4f5;
+      }
+      h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+      p.sub { color: #a1a1aa; font-size: 0.9rem; margin-top: 0; }
+      video, canvas { width: 100%; border-radius: 12px; background: #18181b; }
+      .row { display: flex; gap: 0.75rem; margin: 1rem 0; flex-wrap: wrap; }
+      button {
+        padding: 0.65rem 1.25rem;
+        border: none;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        background: #3b82f6;
+        color: white;
+      }
+      button:disabled { opacity: 0.5; cursor: not-allowed; }
+      button.secondary { background: #27272a; color: #e4e4e7; }
+      #result {
+        margin-top: 1.5rem;
+        padding: 1rem;
+        border-radius: 12px;
+        background: #18181b;
+        display: none;
+      }
+      #result.visible { display: block; }
+      #result img { max-width: 120px; border-radius: 8px; float: left; margin-right: 1rem; }
+      #result a.store {
+        display: inline-block;
+        margin-top: 1rem;
+        color: #60a5fa;
+        font-weight: 600;
+      }
+      .skeleton { color: #71717a; }
+      label { font-size: 0.85rem; color: #a1a1aa; }
+      input[type="text"] {
+        width: 100%;
+        padding: 0.5rem;
+        border-radius: 6px;
+        border: 1px solid #3f3f46;
+        background: #18181b;
+        color: #f4f4f5;
+        margin-top: 0.25rem;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Snap &amp; Shop</h1>
+    <p class="sub">Phase 1 — webcam → Gemini → UCP → merchant cart</p>
+
+    <label for="apiBase">API base URL</label>
+    <input type="text" id="apiBase" value="http://localhost:8000" />
+
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="canvas" hidden></canvas>
+
+    <div class="row">
+      <button id="startBtn" type="button">Start camera</button>
+      <button id="captureBtn" type="button" disabled>Capture &amp; scan</button>
+      <button id="fileBtn" type="button" class="secondary">Upload image</button>
+      <input type="file" id="fileInput" accept="image/*" hidden />
+    </div>
+
+    <div id="result">
+      <div id="resultBody" class="skeleton">Scanning…</div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
