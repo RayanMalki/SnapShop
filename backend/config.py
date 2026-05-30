@@ -16,7 +16,6 @@ class Settings(BaseSettings):
     port: int = 8000
     gemini_api_key: str = ""
     ucp_agent_profile_url: str = ""
-    use_mock_ucp: bool = True
     database_url: str = f"sqlite:///{BACKEND_DIR / 'data' / 'snapshop.db'}"
     upload_dir: str = str(BACKEND_DIR / "uploads")
 
