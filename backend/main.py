@@ -58,7 +58,10 @@ async def scan(
         _scan_jobs[job_id] = ScanResponse(status="processing")
 
         async def _process():
-            result = await run_scan(contents, mime_type, voice_context=voice_context)
+            try:
+                result = await run_scan(contents, mime_type, voice_context=voice_context)
+            except RuntimeError as exc:
+                result = ScanResponse(status="error", error=str(exc))
             _scan_jobs[job_id] = result
             if result.status == "ready":
                 await save_cart(user_id, result)
@@ -66,7 +69,10 @@ async def scan(
         background_tasks.add_task(_process)
         return ScanResponse(status="processing", cart_id=job_id)
 
-    result = await run_scan(contents, mime_type, voice_context=voice_context)
+    try:
+        result = await run_scan(contents, mime_type, voice_context=voice_context)
+    except RuntimeError as exc:
+        return ScanResponse(status="error", error=str(exc))
     if result.status == "ready":
         await save_cart(user_id, result)
     return result

@@ -19,6 +19,10 @@ struct ScanAPIClient {
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse,
               200..<300 ~= httpResponse.statusCode else {
+            if let scanError = try? JSONDecoder().decode(ScanResult.self, from: data),
+               let message = scanError.error {
+                throw ScanAPIError.serverError(message)
+            }
             throw ScanAPIError.badResponse
         }
         return try JSONDecoder().decode(ScanResult.self, from: data)
@@ -49,6 +53,7 @@ struct ScanAPIClient {
 enum ScanAPIError: LocalizedError {
     case invalidURL
     case badResponse
+    case serverError(String)
 
     var errorDescription: String? {
         switch self {
@@ -56,6 +61,8 @@ enum ScanAPIError: LocalizedError {
             return "Invalid scan URL."
         case .badResponse:
             return "The scan request failed."
+        case .serverError(let message):
+            return message
         }
     }
 }
