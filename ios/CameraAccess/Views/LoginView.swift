@@ -9,6 +9,28 @@ struct LoginView: View {
     @State private var selectedMode: AuthMode = .login
     @State private var email = ""
     @State private var password = ""
+    @State private var isSubmitting = false
+    @State private var authError: String?
+
+    private func submit() {
+        isSubmitting = true
+        authError = nil
+        Task { @MainActor in
+            defer { isSubmitting = false }
+            do {
+                let client = AuthAPIClient()
+                let resp = selectedMode == .signup
+                    ? try await client.signup(email: email, password: password)
+                    : try await client.login(email: email, password: password)
+                Session.token = resp.token
+                isLoggedIn = true
+            } catch ScanAPIError.serverError(let message) {
+                authError = message
+            } catch {
+                authError = "Can't connect — is the backend running?"
+            }
+        }
+    }
 
     var body: some View {
         ZStack {
@@ -83,14 +105,24 @@ struct LoginView: View {
                             .aeroField()
                     }
 
+                    if let authError {
+                        Text(authError)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.red.opacity(0.85))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
                     Button {
-                        // TODO: POST /auth/login, store Bearer token in Keychain.
-                        isLoggedIn = true
+                        submit()
                     } label: {
-                        Text(selectedMode == .login ? "Continue" : "Create account")
+                        if isSubmitting {
+                            ProgressView().tint(.white)
+                        } else {
+                            Text(selectedMode == .login ? "Continue" : "Create account")
+                        }
                     }
                     .buttonStyle(AeroPrimaryButtonStyle())
-                    .disabled(email.isEmpty || password.isEmpty)
+                    .disabled(email.isEmpty || password.isEmpty || isSubmitting)
                     .opacity(email.isEmpty || password.isEmpty ? 0.55 : 1)
                 }
             }
@@ -98,7 +130,8 @@ struct LoginView: View {
 
             VStack(spacing: 12) {
                 Button {
-                    // TODO: Wire Google OAuth.
+                    // Demo placeholder — real OAuth would exchange for a token.
+                    Session.token = "guest-google"
                     isLoggedIn = true
                 } label: {
                     OAuthButtonLabel(title: "Continue with Google", brand: .google)
@@ -106,7 +139,7 @@ struct LoginView: View {
                 .buttonStyle(AeroSecondaryButtonStyle())
 
                 Button {
-                    // TODO: Wire Sign in with Apple.
+                    Session.token = "guest-apple"
                     isLoggedIn = true
                 } label: {
                     OAuthButtonLabel(title: "Continue with Apple", brand: .apple)

@@ -6,7 +6,8 @@ import MWDATCore
 
 @main
 struct SnapShopApp: App {
-    @State private var isLoggedIn = false
+    // Start signed in if a token is already stored (persists across launches).
+    @State private var isLoggedIn = Session.isLoggedIn
 
     init() {
         #if canImport(MWDATCore)
@@ -22,7 +23,7 @@ struct SnapShopApp: App {
         WindowGroup {
             Group {
                 if isLoggedIn {
-                    CartView()
+                    CartView(isLoggedIn: $isLoggedIn)
                 } else {
                     LoginView(isLoggedIn: $isLoggedIn)
                 }

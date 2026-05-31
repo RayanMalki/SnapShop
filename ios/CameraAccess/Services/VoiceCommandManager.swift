@@ -20,15 +20,14 @@ final class VoiceCommandManager: ObservableObject {
 
     /// Prefer the device language, then French, then English.
     private static func bestAvailableRecognizer() -> SFSpeechRecognizer? {
-        let candidates = [
+        let candidates = ([
             Locale.preferredLanguages.first,
             Locale.current.identifier,
-            "fr-FR",
+            "fr-FR", 
             "fr_CA",
             "en-US",
             "en-GB",
-        ]
-        .compactMap { $0 }
+        ] as [String?]).compactMap { $0 }
 
         var seen = Set<String>()
         for id in candidates {
@@ -159,11 +158,11 @@ enum VoiceCommandError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .speechPermissionDenied:
-            return "Autorise la reconnaissance vocale dans Réglages."
+            return "Allow speech recognition in Settings."
         case .microphonePermissionDenied:
-            return "Autorise le micro dans Réglages."
+            return "Allow microphone access in Settings."
         case .recognizerUnavailable:
-            return "La reconnaissance vocale n'est pas disponible."
+            return "Speech recognition isn't available."
         }
     }
 }

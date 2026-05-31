@@ -59,50 +59,53 @@ struct ScanResult: Codable {
 
 /// Phase 2 - single product cart; tap opens merchant continue_url in Safari.
 struct CartView: View {
+    @Binding var isLoggedIn: Bool
     @Environment(\.openURL) private var openURL
     @StateObject private var voiceManager = VoiceCommandManager()
     @StateObject private var glassesManager = MetaGlassesManager()
     @State private var result: ScanResult?
-    @State private var isLoading = true
+    @State private var isLoading = false
     @State private var scanPhase: ScanPhase = .idle
     @State private var workflowError: String?
+    @State private var showHistory = false
 
     private let scanClient = ScanAPIClient()
 
     var body: some View {
         ZStack {
             AeroBackground()
+                .ignoresSafeArea()
 
-            VStack(alignment: .leading, spacing: 28) {
-                header
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    header
 
-                voiceScanPanel
+                    voiceScanPanel
 
-                Spacer(minLength: 28)
-
-                if isLoading {
-                    loadingCard
-                } else if let product = result?.product, let urlString = result?.continueUrl,
-                          let url = URL(string: urlString) {
-                    VStack(spacing: 14) {
-                        if result?.isSimilarOnly == true {
-                            similarBanner
+                    if isLoading {
+                        loadingCard
+                    } else if let product = result?.product, let urlString = result?.continueUrl,
+                              let url = URL(string: urlString) {
+                        VStack(spacing: 14) {
+                            if result?.isSimilarOnly == true {
+                                similarBanner
+                            }
+                            productCard(product: product, url: url)
+                            if let alts = result?.alternatives, !alts.isEmpty {
+                                alternativesList(alts, similar: result?.isSimilarOnly == true)
+                            }
                         }
-                        productCard(product: product, url: url)
-                        if let alts = result?.alternatives, !alts.isEmpty {
-                            alternativesList(alts, similar: result?.isSimilarOnly == true)
-                        }
+                    } else {
+                        emptyCard
                     }
-                } else {
-                    emptyCard
                 }
-
-                Spacer()
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+                .padding(.bottom, 40)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 24)
         }
-        .task { await loadCart() }
+        .sheet(isPresented: $showHistory) { HistoryView() }
     }
 
     private var header: some View {
@@ -112,6 +115,28 @@ struct CartView: View {
                 .foregroundStyle(AeroTheme.deepGreen)
 
             Spacer()
+
+            Button {
+                showHistory = true
+            } label: {
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(AeroTheme.leaf)
+                    .padding(10)
+                    .background(Circle().fill(Color.white.opacity(0.5)))
+            }
+
+            Button {
+                Session.clear()
+                isLoggedIn = false
+            } label: {
+                Image(systemName: "rectangle.portrait.and.arrow.right")
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(AeroTheme.deepGreen.opacity(0.7))
+                    .padding(10)
+                    .background(Circle().fill(Color.white.opacity(0.5)))
+            }
+            .padding(.trailing, 8)
 
             VStack(alignment: .trailing, spacing: 2) {
                 Text("items")
@@ -283,7 +308,7 @@ struct CartView: View {
 
     private func alternativesList(_ items: [CartProduct], similar: Bool) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(similar ? "Autres résultats similaires" : "Autres options")
+            Text(similar ? "Other similar results" : "Other options")
                 .font(.caption.weight(.bold))
                 .foregroundStyle(AeroTheme.deepGreen.opacity(0.65))
                 .padding(.leading, 4)
@@ -424,8 +449,8 @@ struct CartView: View {
         isLoading = true
         defer { isLoading = false }
         guard let url = URL(string: "/cart/current", relativeTo: APIConfig.baseURL) else { return }
-        let request = URLRequest(url: url)
-        // request.setValue("Bearer …", forHTTPHeaderField: "Authorization")
+        var request = URLRequest(url: url)
+        Session.authorize(&request)
         do {
             let (data, _) = try await URLSession.shared.data(for: request)
             result = try JSONDecoder().decode(ScanResult.self, from: data)
@@ -515,5 +540,114 @@ private enum ScanPhase {
 }
 
 #Preview {
-    CartView()
+    CartView(isLoggedIn: .constant(true))
+}
+
+// MARK: - History ("My finds")
+
+/// Lists the signed-in user's past scans (GET /history), newest first.
+struct HistoryView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+    @State private var items: [ScanResult] = []
+    @State private var isLoading = true
+
+    var body: some View {
+        ZStack {
+            AeroBackground()
+
+            VStack(alignment: .leading, spacing: 18) {
+                HStack {
+                    Text("My finds")
+                        .font(.system(size: 32, weight: .heavy, design: .rounded))
+                        .foregroundStyle(AeroTheme.deepGreen)
+                    Spacer()
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(AeroTheme.deepGreen.opacity(0.5))
+                    }
+                }
+
+                if isLoading {
+                    ProgressView().tint(AeroTheme.leaf)
+                        .frame(maxWidth: .infinity, minHeight: 120)
+                } else if items.isEmpty {
+                    Text("No finds yet. Scan a product to get started.")
+                        .font(.callout)
+                        .foregroundStyle(AeroTheme.deepGreen.opacity(0.7))
+                        .padding(.top, 24)
+                } else {
+                    ScrollView {
+                        VStack(spacing: 10) {
+                            ForEach(items.indices, id: \.self) { i in
+                                if let product = items[i].product {
+                                    historyRow(items[i], product: product)
+                                }
+                            }
+                        }
+                        .padding(.bottom, 24)
+                    }
+                }
+
+                Spacer()
+            }
+            .padding(20)
+        }
+        .task { await load() }
+    }
+
+    private func historyRow(_ scan: ScanResult, product: CartProduct) -> some View {
+        Button {
+            let link = scan.continueUrl.flatMap { URL(string: $0) } ?? product.bestURL
+            if let link { openURL(link) }
+        } label: {
+            HStack(spacing: 12) {
+                AsyncImage(url: URL(string: product.imageUrl)) { img in
+                    img.resizable().scaledToFill()
+                } placeholder: {
+                    Color.white.opacity(0.6)
+                }
+                .frame(width: 54, height: 54)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(product.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AeroTheme.deepGreen)
+                        .lineLimit(2)
+                    Text(product.merchantDomain)
+                        .font(.caption2)
+                        .foregroundStyle(AeroTheme.deepGreen.opacity(0.55))
+                }
+
+                Spacer(minLength: 6)
+
+                Text(String(format: "$%.2f %@", Double(product.priceMin) / 100.0, product.currency))
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(AeroTheme.deepGreen)
+                    .lineLimit(1)
+            }
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.white.opacity(0.45))
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func load() async {
+        isLoading = true
+        defer { isLoading = false }
+        guard let url = URL(string: "/history", relativeTo: APIConfig.baseURL) else { return }
+        var request = URLRequest(url: url)
+        Session.authorize(&request)
+        do {
+            let (data, _) = try await URLSession.shared.data(for: request)
+            items = try JSONDecoder().decode([ScanResult].self, from: data)
+        } catch {
+            items = []
+        }
+    }
 }

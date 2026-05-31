@@ -10,6 +10,7 @@ struct ScanAPIClient {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        Session.authorize(&request)
         request.httpBody = multipartBody(
             boundary: boundary,
             imageData: imageData,
@@ -64,6 +65,72 @@ enum ScanAPIError: LocalizedError {
         case .serverError(let message):
             return message
         }
+    }
+}
+
+// MARK: - Auth / session
+
+/// Stores the Snap & Shop bearer token (the backend uses it as the user_id, so
+/// each signed-in user gets their own cart + scan history). Persisted in
+/// UserDefaults — fine for the demo; move to Keychain for production.
+enum Session {
+    private static let key = "snapshop.token"
+
+    static var token: String? {
+        get { UserDefaults.standard.string(forKey: key) }
+        set { UserDefaults.standard.set(newValue, forKey: key) }
+    }
+
+    static var isLoggedIn: Bool { !(token ?? "").isEmpty }
+
+    static func clear() { UserDefaults.standard.removeObject(forKey: key) }
+
+    /// Adds `Authorization: Bearer <token>` to a request when signed in.
+    static func authorize(_ request: inout URLRequest) {
+        if let t = token, !t.isEmpty {
+            request.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization")
+        }
+    }
+}
+
+struct AuthResponse: Codable {
+    let token: String
+    let userId: String
+
+    enum CodingKeys: String, CodingKey {
+        case token
+        case userId = "user_id"
+    }
+}
+
+struct AuthAPIClient {
+    /// POST /auth/login — verifies credentials, returns a JWT.
+    func login(email: String, password: String) async throws -> AuthResponse {
+        try await authRequest(path: "/auth/login", email: email, password: password)
+    }
+
+    /// POST /auth/signup — creates the account, returns a JWT.
+    func signup(email: String, password: String) async throws -> AuthResponse {
+        try await authRequest(path: "/auth/signup", email: email, password: password)
+    }
+
+    private func authRequest(path: String, email: String, password: String) async throws -> AuthResponse {
+        guard let url = URL(string: path, relativeTo: APIConfig.baseURL) else {
+            throw ScanAPIError.invalidURL
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(["email": email, "password": password])
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw ScanAPIError.badResponse }
+        guard 200..<300 ~= http.statusCode else {
+            // FastAPI renvoie {"detail": "..."} — on remonte ce message à l'UI.
+            let detail = (try? JSONDecoder().decode([String: String].self, from: data))?["detail"]
+            throw ScanAPIError.serverError(detail ?? "Authentication failed")
+        }
+        return try JSONDecoder().decode(AuthResponse.self, from: data)
     }
 }
 
