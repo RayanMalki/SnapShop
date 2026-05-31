@@ -100,6 +100,49 @@ enum Session {
     }
 }
 
+// MARK: - Cart store
+
+/// Local, account-free cart. Holds every scanned product and persists to
+/// UserDefaults so it survives app restarts (no login, no backend).
+@MainActor
+final class CartStore: ObservableObject {
+    static let shared = CartStore()
+    private let key = "snapshop.cart"
+
+    @Published private(set) var items: [CartProduct] = []
+
+    private init() { load() }
+
+    /// Add a scanned product (newest first), skipping exact duplicates.
+    func add(_ product: CartProduct) {
+        guard !items.contains(where: { $0.variantId == product.variantId }) else { return }
+        items.insert(product, at: 0)
+        save()
+    }
+
+    func remove(at offsets: IndexSet) {
+        items.remove(atOffsets: offsets)
+        save()
+    }
+
+    func clear() {
+        items = []
+        save()
+    }
+
+    private func load() {
+        guard let data = UserDefaults.standard.data(forKey: key),
+              let decoded = try? JSONDecoder().decode([CartProduct].self, from: data) else { return }
+        items = decoded
+    }
+
+    private func save() {
+        if let data = try? JSONEncoder().encode(items) {
+            UserDefaults.standard.set(data, forKey: key)
+        }
+    }
+}
+
 struct AuthResponse: Codable {
     let token: String
     let userId: String

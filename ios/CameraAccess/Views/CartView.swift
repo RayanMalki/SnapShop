@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct CartProduct: Codable {
+struct CartProduct: Codable, Identifiable {
     let variantId: String
     let title: String
     let priceMin: Int
@@ -9,6 +9,8 @@ struct CartProduct: Codable {
     let merchantDomain: String
     let merchantUrl: String?
     let checkoutUrl: String?
+
+    var id: String { variantId }
 
     /// Best link to open for this product (alternatives have no continue_url).
     var bestURL: URL? {
@@ -59,8 +61,8 @@ struct ScanResult: Codable {
 
 /// Phase 2 - single product cart; tap opens merchant continue_url in Safari.
 struct CartView: View {
-    @Binding var isLoggedIn: Bool
     @Environment(\.openURL) private var openURL
+    @ObservedObject private var cart = CartStore.shared
     @StateObject private var voiceManager = VoiceCommandManager()
     @StateObject private var glassesManager = MetaGlassesManager()
     @State private var result: ScanResult?
@@ -105,12 +107,12 @@ struct CartView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .sheet(isPresented: $showHistory) { HistoryView() }
+        .sheet(isPresented: $showHistory) { MyCartView() }
     }
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
-            Text("Cart")
+            Text("Scan")
                 .font(SnapShopTheme.displayFont(size: 48))
                 .foregroundStyle(SnapShopTheme.purple)
 
@@ -119,32 +121,22 @@ struct CartView: View {
             Button {
                 showHistory = true
             } label: {
-                Image(systemName: "clock.arrow.circlepath")
-                    .font(.title2.weight(.bold))
-                    .foregroundStyle(AeroTheme.leaf)
-                    .padding(10)
-                    .background(Circle().fill(SnapShopTheme.softPurple))
-            }
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: "cart")
+                        .font(.title2.weight(.bold))
+                        .foregroundStyle(SnapShopTheme.purple)
+                        .padding(12)
+                        .background(Circle().fill(SnapShopTheme.softPurple))
 
-            Button {
-                Session.clear()
-                isLoggedIn = false
-            } label: {
-                Image(systemName: "rectangle.portrait.and.arrow.right")
-                    .font(.title2.weight(.bold))
-                    .foregroundStyle(SnapShopTheme.purple)
-                    .padding(10)
-                    .background(Circle().fill(SnapShopTheme.softPurple))
-            }
-            .padding(.trailing, 8)
-
-            VStack(alignment: .trailing, spacing: 2) {
-                Text("items")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(AeroTheme.deepGreen.opacity(0.65))
-                Text("\(result?.product == nil ? 0 : 1)")
-                    .font(.title.bold())
-                    .foregroundStyle(AeroTheme.deepGreen)
+                    if !cart.items.isEmpty {
+                        Text("\(cart.items.count)")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.white)
+                            .padding(5)
+                            .background(Circle().fill(AeroTheme.leaf))
+                            .offset(x: 4, y: -4)
+                    }
+                }
             }
         }
     }
@@ -472,9 +464,10 @@ struct CartView: View {
             )
             result = scanResult
             scanPhase = scanResult.status == "ready" ? .ready : .failed
-            if scanResult.status == "ready", scanResult.product != nil {
+            if scanResult.status == "ready", let product = scanResult.product {
+                await MainActor.run { cart.add(product) }
                 await NotificationManager.shared.sendItemFoundNotification(
-                    productTitle: scanResult.product?.title
+                    productTitle: product.title
                 )
             }
             if let error = scanResult.error {
@@ -541,114 +534,95 @@ private enum ScanPhase {
 }
 
 #Preview {
-    CartView(isLoggedIn: .constant(true))
+    CartView()
 }
 
-// MARK: - History ("My finds")
+// MARK: - My Cart (persistent, account-free)
 
-/// Lists the signed-in user's past scans (GET /history), newest first.
-struct HistoryView: View {
+/// The cart: every scanned product, persisted on-device. Swipe left to remove.
+struct MyCartView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
-    @State private var items: [ScanResult] = []
-    @State private var isLoading = true
+    @ObservedObject private var cart = CartStore.shared
 
     var body: some View {
-        ZStack {
-            AeroBackground()
+        NavigationStack {
+            ZStack {
+                AeroBackground().ignoresSafeArea()
 
-            VStack(alignment: .leading, spacing: 18) {
-                HStack {
-                    Text("My finds")
-                        .font(SnapShopTheme.displayFont(size: 36))
-                        .foregroundStyle(SnapShopTheme.purple)
-                    Spacer()
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.title2)
-                            .foregroundStyle(AeroTheme.deepGreen.opacity(0.5))
+                if cart.items.isEmpty {
+                    VStack(spacing: 10) {
+                        Image(systemName: "cart")
+                            .font(.largeTitle)
+                            .foregroundStyle(AeroTheme.leaf)
+                        Text("Your cart is empty")
+                            .font(.title3.bold())
+                            .foregroundStyle(AeroTheme.deepGreen)
+                        Text("Scan a product to add it here.")
+                            .font(.callout)
+                            .foregroundStyle(AeroTheme.deepGreen.opacity(0.7))
                     }
-                }
-
-                if isLoading {
-                    ProgressView().tint(AeroTheme.leaf)
-                        .frame(maxWidth: .infinity, minHeight: 120)
-                } else if items.isEmpty {
-                    Text("No finds yet. Scan a product to get started.")
-                        .font(.callout)
-                        .foregroundStyle(AeroTheme.deepGreen.opacity(0.7))
-                        .padding(.top, 24)
+                    .padding(40)
                 } else {
-                    ScrollView {
-                        VStack(spacing: 10) {
-                            ForEach(items.indices, id: \.self) { i in
-                                if let product = items[i].product {
-                                    historyRow(items[i], product: product)
-                                }
+                    List {
+                        ForEach(cart.items) { product in
+                            Button {
+                                if let url = product.bestURL { openURL(url) }
+                            } label: {
+                                row(product)
                             }
+                            .buttonStyle(.plain)
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 16))
                         }
-                        .padding(.bottom, 24)
+                        .onDelete { cart.remove(at: $0) }
                     }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
                 }
-
-                Spacer()
             }
-            .padding(20)
+            .navigationTitle("My Cart")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                        .foregroundStyle(SnapShopTheme.purple)
+                }
+            }
         }
-        .task { await load() }
     }
 
-    private func historyRow(_ scan: ScanResult, product: CartProduct) -> some View {
-        Button {
-            let link = scan.continueUrl.flatMap { URL(string: $0) } ?? product.bestURL
-            if let link { openURL(link) }
-        } label: {
-            HStack(spacing: 12) {
-                AsyncImage(url: URL(string: product.imageUrl)) { img in
-                    img.resizable().scaledToFill()
-                } placeholder: {
-                    SnapShopTheme.softPurple
-                }
-                .frame(width: 54, height: 54)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    private func row(_ product: CartProduct) -> some View {
+        HStack(spacing: 12) {
+            AsyncImage(url: URL(string: product.imageUrl)) { img in
+                img.resizable().scaledToFill()
+            } placeholder: {
+                SnapShopTheme.softPurple
+            }
+            .frame(width: 54, height: 54)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(product.title)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(AeroTheme.deepGreen)
-                        .lineLimit(2)
-                    Text(product.merchantDomain)
-                        .font(.caption2)
-                        .foregroundStyle(AeroTheme.deepGreen.opacity(0.55))
-                }
-
-                Spacer(minLength: 6)
-
-                Text(String(format: "$%.2f %@", Double(product.priceMin) / 100.0, product.currency))
-                    .font(.subheadline.weight(.bold))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(product.title)
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(AeroTheme.deepGreen)
-                    .lineLimit(1)
+                    .lineLimit(2)
+                Text(product.merchantDomain)
+                    .font(.caption2)
+                    .foregroundStyle(AeroTheme.deepGreen.opacity(0.55))
             }
-            .padding(12)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(SnapShopTheme.softPurple)
-            )
-        }
-        .buttonStyle(.plain)
-    }
 
-    private func load() async {
-        isLoading = true
-        defer { isLoading = false }
-        guard let url = URL(string: "/history", relativeTo: APIConfig.baseURL) else { return }
-        var request = URLRequest(url: url)
-        Session.authorize(&request)
-        do {
-            let (data, _) = try await URLSession.shared.data(for: request)
-            items = try JSONDecoder().decode([ScanResult].self, from: data)
-        } catch {
-            items = []
+            Spacer(minLength: 6)
+
+            Text(String(format: "$%.2f %@", Double(product.priceMin) / 100.0, product.currency))
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(AeroTheme.deepGreen)
+                .lineLimit(1)
         }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(SnapShopTheme.softPurple)
+        )
     }
 }

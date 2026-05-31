@@ -79,13 +79,9 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
 
 @main
 struct SnapShopApp: App {
-    // Authentication is intentionally required again after every app launch.
-    @State private var isLoggedIn = false
     @State private var didCompleteOnboarding = false
 
     init() {
-        Session.clear()
-
         // Configure the Meta Wearables SDK BEFORE any view/StateObject (e.g.
         // CartView's MetaGlassesManager) accesses Wearables.
         #if canImport(MWDATCore)
@@ -102,10 +98,8 @@ struct SnapShopApp: App {
             Group {
                 if !didCompleteOnboarding {
                     OnboardingView(didCompleteOnboarding: $didCompleteOnboarding)
-                } else if isLoggedIn {
-                    CartView(isLoggedIn: $isLoggedIn)
                 } else {
-                    LoginView(isLoggedIn: $isLoggedIn)
+                    CartView()
                 }
             }
             .font(SnapShopTheme.bodyFont(size: 16))
