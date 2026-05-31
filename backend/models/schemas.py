@@ -23,6 +23,14 @@ class VisionAttributes(BaseModel):
     query_broad: str = Field(default="", description="Fallback query without brand / uncertain attrs")
 
 
+class VisualMatch(BaseModel):
+    """Résultat du re-ranking visuel : quel candidat ressemble le plus à la photo."""
+
+    best_index: int = Field(description="0-based index of the best-matching candidate")
+    confidence: float = Field(default=0.0, description="0..1 confidence in the match")
+    reasoning: str = Field(default="", description="Short why")
+
+
 class Product(BaseModel):
     variant_id: str
     title: str
