@@ -1,7 +1,9 @@
 import asyncio
 import logging
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
+from time import perf_counter
 
 import httpx
 
@@ -10,6 +12,48 @@ from models.schemas import RerankVerdict
 from models.schemas import VisionAttributes as VisionResult
 
 logger = logging.getLogger(__name__)
+_image_http_client: httpx.AsyncClient | None = None
+
+
+def _thinking_config(types):
+    return types.ThinkingConfig(thinking_budget=settings.gemini_thinking_budget)
+
+
+def _log_gemini_usage(stage: str, response) -> None:
+    usage = response.usage_metadata
+    if usage is None:
+        return
+    logger.info(
+        "%s usage: total_tokens=%s thought_tokens=%s",
+        stage,
+        usage.total_token_count,
+        usage.thoughts_token_count,
+    )
+
+
+@lru_cache(maxsize=1)
+def _gemini_client():
+    from google import genai
+
+    return genai.Client(api_key=settings.gemini_api_key)
+
+
+def _shared_image_http_client() -> httpx.AsyncClient:
+    global _image_http_client
+    if _image_http_client is None:
+        _image_http_client = httpx.AsyncClient(
+            timeout=15.0,
+            follow_redirects=True,
+            http2=True,
+        )
+    return _image_http_client
+
+
+async def close_http_client() -> None:
+    global _image_http_client
+    if _image_http_client is not None:
+        await _image_http_client.aclose()
+        _image_http_client = None
 
 
 @dataclass
@@ -24,8 +68,6 @@ class RerankOutcome:
     order: list[int]
     confidence: float
     reason: str
-
-MODEL = "gemini-2.5-flash"
 
 _MIME_BY_SUFFIX = {
     ".jpg": "image/jpeg",
@@ -131,13 +173,10 @@ async def analyze_image_bytes(
     if not settings.gemini_api_key:
         raise RuntimeError("GEMINI_API_KEY is not configured")
 
-    from google import genai
     from google.genai import types
 
-    client = genai.Client(api_key=settings.gemini_api_key)
-
-    response = await client.aio.models.generate_content(
-        model=MODEL,
+    response = await _gemini_client().aio.models.generate_content(
+        model=settings.gemini_analysis_model,
         contents=[
             types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
             _prompt_with_context(voice_context),
@@ -146,8 +185,10 @@ async def analyze_image_bytes(
             response_mime_type="application/json",
             response_schema=VisionResult,
             temperature=0.0,
+            thinking_config=_thinking_config(types),
         ),
     )
+    _log_gemini_usage("Gemini extraction", response)
 
     result = response.parsed
     if result is None:
@@ -302,8 +343,15 @@ async def rerank_candidates(
         return None
 
     urls = [c.get("image_url") or "" for c in candidates]
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        fetched = await asyncio.gather(*(_fetch_image(client, url) for url in urls))
+    fetch_started = perf_counter()
+    client = _shared_image_http_client()
+    fetched = await asyncio.gather(*(_fetch_image(client, url) for url in urls))
+    logger.info(
+        "visual rerank: downloaded %d/%d candidate images in %.3fs",
+        sum(item is not None for item in fetched),
+        len(urls),
+        perf_counter() - fetch_started,
+    )
 
     # Map the number shown to Gemini -> original candidate index. Images that
     # fail to download are dropped, so the presented numbering is dense.
@@ -315,10 +363,7 @@ async def rerank_candidates(
     if not kept:
         return None
 
-    from google import genai
     from google.genai import types
-
-    genai_client = genai.Client(api_key=settings.gemini_api_key)
 
     parts: list[object] = [
         RERANK_INSTRUCTIONS,
@@ -337,14 +382,21 @@ async def rerank_candidates(
         parts.append(types.Part.from_bytes(data=data, mime_type=content_type))
 
     try:
-        response = await genai_client.aio.models.generate_content(
-            model=MODEL,
+        rerank_started = perf_counter()
+        response = await _gemini_client().aio.models.generate_content(
+                model=settings.gemini_rerank_model,
             contents=parts,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 response_schema=RerankVerdict,
                 temperature=0.0,
+                thinking_config=_thinking_config(types),
             ),
+        )
+        _log_gemini_usage("Gemini rerank", response)
+        logger.info(
+            "visual rerank: Gemini call completed in %.3fs",
+            perf_counter() - rerank_started,
         )
     except Exception:
         logger.exception("visual rerank: Gemini call failed")

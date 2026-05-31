@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import logging
+from time import perf_counter
 
 from config import settings
 from models.schemas import Product, ScanResponse
@@ -13,7 +14,8 @@ logger = logging.getLogger(__name__)
 # true match isn't dropped before the strong (visual + text) reranker sees it.
 # Bigger because keyword-light titles (e.g. "Corne MX Split Keyboard") of the
 # actual product score low on token overlap and were being cut pre-rerank.
-RERANK_SHORTLIST = 18
+RERANK_SHORTLIST = settings.rerank_shortlist
+SEARCH_COUNTRIES = ("US", "CA")
 
 
 def _format_price(cents: int, currency: str) -> str:
@@ -94,12 +96,15 @@ async def run_scan(
     mime_type: str = "image/jpeg",
     voice_context: str | None = None,
 ) -> ScanResponse:
+    scan_started = perf_counter()
     try:
+        stage_started = perf_counter()
         vision_result = await vision.analyze_image_bytes(
             image_bytes,
             mime_type,
             voice_context=voice_context,
         )
+        logger.info("scan timing: Gemini extraction %.3fs", perf_counter() - stage_started)
     except Exception as exc:
         logger.exception("vision analysis failed")
         return ScanResponse(
@@ -125,9 +130,24 @@ async def run_scan(
     # and a wrong guess would exclude the true match entirely. Each query may
     # fail independently; gather with return_exceptions so one outage doesn't
     # sink the whole scan, and tell a service outage apart from a real no-match.
+    stage_started = perf_counter()
     results = await asyncio.gather(
-        *(ucp.search_catalog(q, intent=search_intent) for q in queries),
+        *(
+            ucp.search_catalog(
+                q,
+                intent=search_intent,
+                ships_to_country=country,
+            )
+            for q in queries
+            for country in SEARCH_COUNTRIES
+        ),
         return_exceptions=True,
+    )
+    logger.info(
+        "scan timing: UCP catalog search %.3fs (%d queries across %s)",
+        perf_counter() - stage_started,
+        len(queries),
+        ", ".join(SEARCH_COUNTRIES),
     )
     groups = [r for r in results if not isinstance(r, Exception)]
     if not groups:
@@ -146,12 +166,19 @@ async def run_scan(
     if settings.ucp_like_search_enabled:
         try:
             like_b64 = base64.b64encode(image_bytes).decode("ascii")
-            candidates += await ucp.search_catalog(
-                search_query,
-                intent=search_intent,
-                like_image_b64=like_b64,
-                like_image_mime=mime_type,
+            like_results = await asyncio.gather(
+                *(
+                    ucp.search_catalog(
+                        search_query,
+                        intent=search_intent,
+                        ships_to_country=country,
+                        like_image_b64=like_b64,
+                        like_image_mime=mime_type,
+                    )
+                    for country in SEARCH_COUNTRIES
+                )
             )
+            candidates += [candidate for group in like_results for candidate in group]
         except Exception:
             logger.info("UCP like-image search unavailable; skipping")
 
@@ -165,6 +192,7 @@ async def run_scan(
     match_reason: str | None = None
     shortlist = _build_shortlist(candidates, RERANK_SHORTLIST)
     if len(shortlist) > 1:
+        stage_started = perf_counter()
         outcome = await vision.rerank_candidates(
             image_bytes,
             [
@@ -177,6 +205,11 @@ async def run_scan(
             ],
             _target_spec(vision_result, voice_context),
             mime_type,
+        )
+        logger.info(
+            "scan timing: visual rerank %.3fs (%d candidates)",
+            perf_counter() - stage_started,
+            len(shortlist),
         )
         if outcome is not None:
             confidence = outcome.confidence
@@ -240,7 +273,7 @@ async def run_scan(
                 error="Could not build a checkout link for this product",
             )
 
-    return ScanResponse(
+    response = ScanResponse(
         status="ready",
         vision_summary=summary,
         search_query=search_query,
@@ -254,3 +287,5 @@ async def run_scan(
         match_quality=match_quality,
         alternatives=alternatives,
     )
+    logger.info("scan timing: total pipeline %.3fs", perf_counter() - scan_started)
+    return response

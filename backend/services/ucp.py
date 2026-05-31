@@ -10,7 +10,6 @@ https://shopify.dev/ucp/schemas/2026-04-08/shopify_catalog_global.json.
 """
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import math
@@ -18,8 +17,8 @@ import re
 import uuid
 from dataclasses import dataclass, field
 from typing import Any
-from urllib import error as urlerror
-from urllib import request as urlrequest
+
+import httpx
 
 from config import settings
 from models.schemas import Product
@@ -30,6 +29,29 @@ CATALOG_MCP_URL = "https://catalog.shopify.com/api/ucp/mcp"
 # Public demo agent profile baked into @shopify/ucp-cli; works out of the box
 # until we host our own at https://snapshop.dev/.well-known/ucp-agent.json.
 DEFAULT_AGENT_PROFILE_URL = "https://www.igvita.com/ucp/profile.json"
+_http_client: httpx.AsyncClient | None = None
+
+
+def _shared_http_client() -> httpx.AsyncClient:
+    global _http_client
+    if _http_client is None:
+        _http_client = httpx.AsyncClient(
+            timeout=30.0,
+            follow_redirects=True,
+            http2=True,
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+        )
+    return _http_client
+
+
+async def close_http_client() -> None:
+    global _http_client
+    if _http_client is not None:
+        await _http_client.aclose()
+        _http_client = None
 
 
 def _agent_profile_url() -> str:
@@ -81,7 +103,7 @@ class MCPClient:
         }
         if params is not None:
             payload["params"] = params
-        resp_status, resp_text = await asyncio.to_thread(self._post_json, payload)
+        resp_status, resp_text = await self._post_json(payload)
         try:
             body = json.loads(resp_text)
         except json.JSONDecodeError as exc:
@@ -103,24 +125,13 @@ class MCPClient:
             "tools/call", {"name": name, "arguments": arguments}
         )
 
-    def _post_json(self, payload: dict[str, Any]) -> tuple[int, str]:
-        body = json.dumps(payload).encode("utf-8")
-        req = urlrequest.Request(
+    async def _post_json(self, payload: dict[str, Any]) -> tuple[int, str]:
+        response = await _shared_http_client().post(
             self.endpoint,
-            data=body,
-            method="POST",
-            headers={
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-            },
+            content=json.dumps(payload).encode("utf-8"),
+            timeout=self.timeout,
         )
-        try:
-            with urlrequest.urlopen(req, timeout=self.timeout) as response:
-                text = response.read().decode("utf-8", errors="replace")
-                return response.status, text
-        except urlerror.HTTPError as exc:
-            text = exc.read().decode("utf-8", errors="replace")
-            return exc.code, text
+        return response.status_code, response.text
 
     async def list_tools(
         self, profile_url: str | None = None
