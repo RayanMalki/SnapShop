@@ -3,6 +3,13 @@ uvicorn[standard]>=0.32.0
 python-multipart>=0.0.12
 pydantic>=2.9.0
 pydantic-settings>=2.6.0
+<<<<<<< Updated upstream
 httpx>=0.27.0
+=======
+httpx[http2]>=0.27.0
+motor>=3.5.0
+bcrypt>=4.1.0
+pyjwt>=2.9.0
+>>>>>>> Stashed changes
 google-genai>=1.0.0
 pillow>=10.0.0

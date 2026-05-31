@@ -15,6 +15,15 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
     gemini_api_key: str = ""
+    # Gemini 2.5 Flash enables dynamic thinking by default. Product extraction
+    # and shortlist ranking are latency-sensitive structured tasks, so disable
+    # hidden reasoning unless a deployment explicitly opts back in with -1.
+    gemini_thinking_budget: int = 0
+    # Keep model choice and shortlist size configurable for controlled latency
+    # experiments. Defaults preserve the stronger visual matching path.
+    gemini_analysis_model: str = "gemini-2.5-flash"
+    gemini_rerank_model: str = "gemini-2.5-flash"
+    rerank_shortlist: int = 18
     ucp_agent_profile_url: str = ""
     # The public catalog endpoint currently rejects `like` image search, so the
     # extra round-trip (which base64-encodes the whole photo) is wasted. Off by
