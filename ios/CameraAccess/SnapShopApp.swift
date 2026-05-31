@@ -82,6 +82,19 @@ struct SnapShopApp: App {
     // Start signed in if a token is already stored (persists across launches).
     @State private var isLoggedIn = Session.isLoggedIn
 
+    init() {
+        // Configure the Meta Wearables SDK BEFORE any view/StateObject (e.g.
+        // CartView's MetaGlassesManager) accesses Wearables. Deferring this to
+        // .task crashes when we launch straight into CartView (persisted login).
+        #if canImport(MWDATCore)
+        do {
+            try Wearables.configure()
+        } catch {
+            NSLog("[SnapShop] Failed to configure Meta Wearables SDK: \(error)")
+        }
+        #endif
+    }
+
     var body: some Scene {
         WindowGroup {
             Group {
@@ -92,9 +105,6 @@ struct SnapShopApp: App {
                 }
             }
             .preferredColorScheme(.light)
-            .task {
-                configureWearablesIfAvailable()
-            }
             .onOpenURL { url in
                 #if canImport(MWDATCore)
                 Task {
@@ -103,15 +113,5 @@ struct SnapShopApp: App {
                 #endif
             }
         }
-    }
-
-    private func configureWearablesIfAvailable() {
-        #if canImport(MWDATCore)
-        do {
-            try Wearables.configure()
-        } catch {
-            NSLog("[SnapShop] Failed to configure Meta Wearables SDK: \(error)")
-        }
-        #endif
     }
 }
