@@ -28,7 +28,7 @@ class Product(BaseModel):
     title: str
     price_min: int = Field(description="Price in cents")
     price_max: int = Field(description="Price in cents")
-    currency: str = "CAD"
+    currency: str = "USD"
     image_url: str
     merchant_domain: str
     merchant_url: str
