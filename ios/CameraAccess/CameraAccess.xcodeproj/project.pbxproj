@@ -17,6 +17,8 @@
 		2A0000082C00000000000001 /* MetaGlassesManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0000182C00000000000001 /* MetaGlassesManager.swift */; };
 		2A0000092C00000000000001 /* MWDATCore in Frameworks */ = {isa = PBXBuildFile; productRef = 2A0000A12C00000000000001 /* MWDATCore */; };
 		2A00000A2C00000000000001 /* MWDATCamera in Frameworks */ = {isa = PBXBuildFile; productRef = 2A0000A22C00000000000001 /* MWDATCamera */; };
+		2A00000B2C00000000000001 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A00001A2C00000000000001 /* OnboardingView.swift */; };
+		2A00000C2C00000000000001 /* InterVariable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 2A00001B2C00000000000001 /* InterVariable.ttf */; };
 		80C1E2C52FCC18A0003E1970 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 80C1E2C42FCC18A0003E1970 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -31,6 +33,8 @@
 		2A0000172C00000000000001 /* VoiceCommandManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCommandManager.swift; sourceTree = "<group>"; };
 		2A0000182C00000000000001 /* MetaGlassesManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetaGlassesManager.swift; sourceTree = "<group>"; };
 		2A0000192C00000000000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		2A00001A2C00000000000001 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		2A00001B2C00000000000001 /* InterVariable.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = InterVariable.ttf; sourceTree = "<group>"; };
 		80C1E2C42FCC18A0003E1970 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -64,6 +68,7 @@
 				2A0000192C00000000000001 /* Info.plist */,
 				2A0000342C00000000000001 /* Services */,
 				2A0000332C00000000000001 /* Views */,
+				2A0000352C00000000000001 /* Fonts */,
 			);
 			sourceTree = "<group>";
 		};
@@ -81,6 +86,7 @@
 				2A0000132C00000000000001 /* AeroTheme.swift */,
 				2A0000142C00000000000001 /* LoginView.swift */,
 				2A0000152C00000000000001 /* CartView.swift */,
+				2A00001A2C00000000000001 /* OnboardingView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -93,6 +99,14 @@
 				2A0000182C00000000000001 /* MetaGlassesManager.swift */,
 			);
 			path = Services;
+			sourceTree = "<group>";
+		};
+		2A0000352C00000000000001 /* Fonts */ = {
+			isa = PBXGroup;
+			children = (
+				2A00001B2C00000000000001 /* InterVariable.ttf */,
+			);
+			path = Fonts;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -160,6 +174,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2A00000C2C00000000000001 /* InterVariable.ttf in Resources */,
 				80C1E2C52FCC18A0003E1970 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -179,6 +194,7 @@
 				2A0000062C00000000000001 /* ScanAPIClient.swift in Sources */,
 				2A0000072C00000000000001 /* VoiceCommandManager.swift in Sources */,
 				2A0000082C00000000000001 /* MetaGlassesManager.swift in Sources */,
+				2A00000B2C00000000000001 /* OnboardingView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

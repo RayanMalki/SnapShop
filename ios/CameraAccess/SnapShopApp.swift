@@ -79,13 +79,15 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
 
 @main
 struct SnapShopApp: App {
-    // Start signed in if a token is already stored (persists across launches).
-    @State private var isLoggedIn = Session.isLoggedIn
+    // Authentication is intentionally required again after every app launch.
+    @State private var isLoggedIn = false
+    @State private var didCompleteOnboarding = false
 
     init() {
+        Session.clear()
+
         // Configure the Meta Wearables SDK BEFORE any view/StateObject (e.g.
-        // CartView's MetaGlassesManager) accesses Wearables. Deferring this to
-        // .task crashes when we launch straight into CartView (persisted login).
+        // CartView's MetaGlassesManager) accesses Wearables.
         #if canImport(MWDATCore)
         do {
             try Wearables.configure()
@@ -98,13 +100,17 @@ struct SnapShopApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                if isLoggedIn {
+                if !didCompleteOnboarding {
+                    OnboardingView(didCompleteOnboarding: $didCompleteOnboarding)
+                } else if isLoggedIn {
                     CartView(isLoggedIn: $isLoggedIn)
                 } else {
                     LoginView(isLoggedIn: $isLoggedIn)
                 }
             }
+            .font(SnapShopTheme.bodyFont(size: 16))
             .preferredColorScheme(.light)
+            .tint(SnapShopTheme.purple)
             .onOpenURL { url in
                 #if canImport(MWDATCore)
                 Task {

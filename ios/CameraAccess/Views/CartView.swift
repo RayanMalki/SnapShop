@@ -111,8 +111,8 @@ struct CartView: View {
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
             Text("Cart")
-                .font(.system(size: 44, weight: .heavy, design: .rounded))
-                .foregroundStyle(AeroTheme.deepGreen)
+                .font(SnapShopTheme.displayFont(size: 48))
+                .foregroundStyle(SnapShopTheme.purple)
 
             Spacer()
 
@@ -123,7 +123,7 @@ struct CartView: View {
                     .font(.title2.weight(.bold))
                     .foregroundStyle(AeroTheme.leaf)
                     .padding(10)
-                    .background(Circle().fill(Color.white.opacity(0.5)))
+                    .background(Circle().fill(SnapShopTheme.softPurple))
             }
 
             Button {
@@ -132,9 +132,9 @@ struct CartView: View {
             } label: {
                 Image(systemName: "rectangle.portrait.and.arrow.right")
                     .font(.title2.weight(.bold))
-                    .foregroundStyle(AeroTheme.deepGreen.opacity(0.7))
+                    .foregroundStyle(SnapShopTheme.purple)
                     .padding(10)
-                    .background(Circle().fill(Color.white.opacity(0.5)))
+                    .background(Circle().fill(SnapShopTheme.softPurple))
             }
             .padding(.trailing, 8)
 
@@ -204,7 +204,7 @@ struct CartView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(
                             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(Color.white.opacity(0.50))
+                                .fill(SnapShopTheme.softPurple)
                         )
                 }
 
@@ -327,7 +327,7 @@ struct CartView: View {
                 AsyncImage(url: URL(string: product.imageUrl)) { image in
                     image.resizable().scaledToFill()
                 } placeholder: {
-                    Color.white.opacity(0.6)
+                    SnapShopTheme.softPurple
                 }
                 .frame(width: 48, height: 48)
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -352,7 +352,7 @@ struct CartView: View {
             .padding(10)
             .background(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color.white.opacity(0.45))
+                    .fill(SnapShopTheme.softPurple)
             )
         }
         .buttonStyle(.plain)
@@ -402,31 +402,27 @@ struct CartView: View {
             image.resizable().scaledToFill()
         } placeholder: {
             ZStack {
-                LinearGradient(
-                    colors: [Color.white.opacity(0.80), AeroTheme.mint.opacity(0.70)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                Image(systemName: "sparkles")
-                    .foregroundStyle(AeroTheme.leaf)
+                SnapShopTheme.softPurple
+                Image(systemName: "photo")
+                    .foregroundStyle(.secondary)
             }
         }
         .frame(width: 74, height: 74)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color.white.opacity(0.80), lineWidth: 1)
+                .stroke(SnapShopTheme.border, lineWidth: 1)
         )
     }
 
     private func providerBadge(domain: String) -> some View {
         ZStack {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.white.opacity(0.60))
+                .fill(SnapShopTheme.softPurple)
                 .frame(width: 58, height: 58)
                 .overlay(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(Color.white.opacity(0.84), lineWidth: 1)
+                        .stroke(SnapShopTheme.border, lineWidth: 1)
                 )
 
             Text(providerInitial(domain))
@@ -564,8 +560,8 @@ struct HistoryView: View {
             VStack(alignment: .leading, spacing: 18) {
                 HStack {
                     Text("My finds")
-                        .font(.system(size: 32, weight: .heavy, design: .rounded))
-                        .foregroundStyle(AeroTheme.deepGreen)
+                        .font(SnapShopTheme.displayFont(size: 36))
+                        .foregroundStyle(SnapShopTheme.purple)
                     Spacer()
                     Button { dismiss() } label: {
                         Image(systemName: "xmark.circle.fill")
@@ -611,7 +607,7 @@ struct HistoryView: View {
                 AsyncImage(url: URL(string: product.imageUrl)) { img in
                     img.resizable().scaledToFill()
                 } placeholder: {
-                    Color.white.opacity(0.6)
+                    SnapShopTheme.softPurple
                 }
                 .frame(width: 54, height: 54)
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -636,7 +632,7 @@ struct HistoryView: View {
             .padding(12)
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color.white.opacity(0.45))
+                    .fill(SnapShopTheme.softPurple)
             )
         }
         .buttonStyle(.plain)

@@ -81,7 +81,14 @@ enum Session {
         set { UserDefaults.standard.set(newValue, forKey: key) }
     }
 
-    static var isLoggedIn: Bool { !(token ?? "").isEmpty }
+    static var isLoggedIn: Bool {
+        guard let token, !token.isEmpty else { return false }
+        if token == "anonymous-demo" {
+            clear()
+            return false
+        }
+        return true
+    }
 
     static func clear() { UserDefaults.standard.removeObject(forKey: key) }
 
