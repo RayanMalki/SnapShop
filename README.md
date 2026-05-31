@@ -27,7 +27,7 @@ curl http://localhost:8000/health
 curl -X POST http://localhost:8000/scan -F "file=@shirt.jpg"
 ```
 
-With `USE_MOCK_UCP=true` (default in `.env.example`), `/scan` returns fake product + `continue_url` without UCP/Gemini keys.
+`/scan` requires a valid `GEMINI_API_KEY` to analyze the image.
 
 ## Web test UI (Phase 1)
 

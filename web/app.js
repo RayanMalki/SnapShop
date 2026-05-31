@@ -56,6 +56,7 @@ function renderResult(data) {
   }
   const p = data.product;
   const price = (p.price_min / 100).toFixed(2);
+  const siteUrl = p.merchant_url || (p.merchant_domain ? `https://${p.merchant_domain}` : "");
   resultBody.className = "";
   resultBody.innerHTML = `
     <img src="${p.image_url}" alt="" />
@@ -64,9 +65,10 @@ function renderResult(data) {
     <span>${p.merchant_domain}</span><br />
     <em>${data.vision_summary || ""}</em>
     <br clear="all" />
-    <a class="store" href="${data.continue_url}" target="_blank" rel="noopener">
-      Go to store →
-    </a>
+    <div class="links">
+      ${data.continue_url ? `<a class="store" href="${data.continue_url}" target="_blank" rel="noopener">Checkout →</a>` : ""}
+      ${siteUrl ? `<a class="site" href="${siteUrl}" target="_blank" rel="noopener">Visit site →</a>` : ""}
+    </div>
   `;
 }
 

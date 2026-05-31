@@ -26,8 +26,6 @@ async def _ensure_image(arg: str | None) -> Path:
 async def main() -> None:
     arg = sys.argv[1] if len(sys.argv) > 1 else None
     image_path = await _ensure_image(arg)
-    mode = "MOCK (no GEMINI_API_KEY)" if not settings.gemini_api_key else "GEMINI"
-    print(f"[mode] {mode}")
     print(f"[image] {image_path}")
     result = await analyze_image(image_path)
     print("[result]")
