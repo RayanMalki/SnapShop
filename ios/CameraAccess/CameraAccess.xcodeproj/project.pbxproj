@@ -12,6 +12,11 @@
 		2A0000032C00000000000001 /* AeroTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0000132C00000000000001 /* AeroTheme.swift */; };
 		2A0000042C00000000000001 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0000142C00000000000001 /* LoginView.swift */; };
 		2A0000052C00000000000001 /* CartView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0000152C00000000000001 /* CartView.swift */; };
+		2A0000062C00000000000001 /* ScanAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0000162C00000000000001 /* ScanAPIClient.swift */; };
+		2A0000072C00000000000001 /* VoiceCommandManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0000172C00000000000001 /* VoiceCommandManager.swift */; };
+		2A0000082C00000000000001 /* MetaGlassesManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0000182C00000000000001 /* MetaGlassesManager.swift */; };
+		2A0000092C00000000000001 /* MWDATCore in Frameworks */ = {isa = PBXBuildFile; productRef = 2A0000A12C00000000000001 /* MWDATCore */; };
+		2A00000A2C00000000000001 /* MWDATCamera in Frameworks */ = {isa = PBXBuildFile; productRef = 2A0000A22C00000000000001 /* MWDATCamera */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -21,6 +26,10 @@
 		2A0000132C00000000000001 /* AeroTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroTheme.swift; sourceTree = "<group>"; };
 		2A0000142C00000000000001 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		2A0000152C00000000000001 /* CartView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CartView.swift; sourceTree = "<group>"; };
+		2A0000162C00000000000001 /* ScanAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanAPIClient.swift; sourceTree = "<group>"; };
+		2A0000172C00000000000001 /* VoiceCommandManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCommandManager.swift; sourceTree = "<group>"; };
+		2A0000182C00000000000001 /* MetaGlassesManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetaGlassesManager.swift; sourceTree = "<group>"; };
+		2A0000192C00000000000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -28,6 +37,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2A0000092C00000000000001 /* MWDATCore in Frameworks */,
+				2A00000A2C00000000000001 /* MWDATCamera in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -47,6 +58,8 @@
 			children = (
 				2A0000112C00000000000001 /* SnapShopApp.swift */,
 				2A0000122C00000000000001 /* APIConfig.swift */,
+				2A0000192C00000000000001 /* Info.plist */,
+				2A0000342C00000000000001 /* Services */,
 				2A0000332C00000000000001 /* Views */,
 			);
 			path = "";
@@ -70,6 +83,16 @@
 			path = Views;
 			sourceTree = "<group>";
 		};
+		2A0000342C00000000000001 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				2A0000162C00000000000001 /* ScanAPIClient.swift */,
+				2A0000172C00000000000001 /* VoiceCommandManager.swift */,
+				2A0000182C00000000000001 /* MetaGlassesManager.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -86,6 +109,10 @@
 			dependencies = (
 			);
 			name = CameraAccess;
+			packageProductDependencies = (
+				2A0000A12C00000000000001 /* MWDATCore */,
+				2A0000A22C00000000000001 /* MWDATCamera */,
+			);
 			productName = CameraAccess;
 			productReference = 2A0000102C00000000000001 /* CameraAccess.app */;
 			productType = "com.apple.product-type.application";
@@ -114,6 +141,9 @@
 				Base,
 			);
 			mainGroup = 2A0000302C00000000000001;
+			packageReferences = (
+				2A0000A02C00000000000001 /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */,
+			);
 			productRefGroup = 2A0000322C00000000000001 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -143,10 +173,37 @@
 				2A0000032C00000000000001 /* AeroTheme.swift in Sources */,
 				2A0000042C00000000000001 /* LoginView.swift in Sources */,
 				2A0000052C00000000000001 /* CartView.swift in Sources */,
+				2A0000062C00000000000001 /* ScanAPIClient.swift in Sources */,
+				2A0000072C00000000000001 /* VoiceCommandManager.swift in Sources */,
+				2A0000082C00000000000001 /* MetaGlassesManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		2A0000A02C00000000000001 /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/facebook/meta-wearables-dat-ios";
+			requirement = {
+				kind = exactVersion;
+				version = 0.7.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		2A0000A12C00000000000001 /* MWDATCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2A0000A02C00000000000001 /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */;
+			productName = MWDATCore;
+		};
+		2A0000A22C00000000000001 /* MWDATCamera */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2A0000A02C00000000000001 /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */;
+			productName = MWDATCamera;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin XCBuildConfiguration section */
 		2A0000812C00000000000001 /* Debug */ = {
@@ -158,7 +215,8 @@
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = 8RXQA62R8G;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = SnapShop;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.shopping";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -191,7 +249,8 @@
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = 8RXQA62R8G;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = SnapShop;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.shopping";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

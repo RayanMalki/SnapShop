@@ -23,20 +23,28 @@ struct ScanResult: Codable {
     let visionSummary: String?
     let product: CartProduct?
     let continueUrl: String?
+    let error: String?
 
     enum CodingKeys: String, CodingKey {
         case status
         case visionSummary = "vision_summary"
         case product
         case continueUrl = "continue_url"
+        case error
     }
 }
 
 /// Phase 2 - single product cart; tap opens merchant continue_url in Safari.
 struct CartView: View {
     @Environment(\.openURL) private var openURL
+    @StateObject private var voiceManager = VoiceCommandManager()
+    @StateObject private var glassesManager = MetaGlassesManager()
     @State private var result: ScanResult?
     @State private var isLoading = true
+    @State private var scanPhase: ScanPhase = .idle
+    @State private var workflowError: String?
+
+    private let scanClient = ScanAPIClient()
 
     var body: some View {
         ZStack {
@@ -45,7 +53,9 @@ struct CartView: View {
             VStack(alignment: .leading, spacing: 28) {
                 header
 
-                Spacer(minLength: 60)
+                voiceScanPanel
+
+                Spacer(minLength: 28)
 
                 if isLoading {
                     loadingCard
@@ -98,6 +108,104 @@ struct CartView: View {
                 Spacer()
             }
             .foregroundStyle(AeroTheme.deepGreen)
+        }
+    }
+
+    private var voiceScanPanel: some View {
+        GlassPanel {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 12) {
+                    Image(systemName: scanPhase.symbolName)
+                        .font(.title2.weight(.bold))
+                        .foregroundStyle(AeroTheme.leaf)
+                        .frame(width: 32)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(scanPhase.title)
+                            .font(.headline.weight(.bold))
+                            .foregroundStyle(AeroTheme.deepGreen)
+
+                        Text(statusLine)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(AeroTheme.deepGreen.opacity(0.62))
+                    }
+
+                    Spacer()
+
+                    if scanPhase.isBusy {
+                        ProgressView()
+                            .tint(AeroTheme.leaf)
+                    }
+                }
+
+                if !voiceManager.transcript.isEmpty {
+                    Text("\" \(voiceManager.transcript) \"")
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(AeroTheme.deepGreen)
+                        .lineLimit(3)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(Color.white.opacity(0.50))
+                        )
+                }
+
+                if let workflowError {
+                    Text(workflowError)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.red.opacity(0.82))
+                }
+
+                HStack(spacing: 10) {
+                    if glassesManager.needsRegistration {
+                        Button {
+                            Task { await glassesManager.registerWithMetaAI() }
+                        } label: {
+                            Label("Connect", systemImage: "eyeglasses")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(AeroPrimaryButtonStyle())
+                        .disabled(scanPhase.isBusy)
+                    } else {
+                        Button {
+                            Task { await glassesManager.registerWithMetaAI() }
+                        } label: {
+                            Label("Registered", systemImage: "eyeglasses")
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(AeroTheme.leaf)
+                        .disabled(scanPhase.isBusy)
+                    }
+
+                    Button {
+                        Task { await runVoiceScan() }
+                    } label: {
+                        Label("Voice scan", systemImage: "waveform")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(AeroPrimaryButtonStyle())
+                    .disabled(scanPhase.isBusy || glassesManager.needsRegistration)
+                }
+            }
+        }
+    }
+
+    private var statusLine: String {
+        switch scanPhase {
+        case .idle:
+            return glassesManager.statusText
+        case .listening:
+            return "Speak naturally, e.g. find the green hoodie."
+        case .capturing:
+            return "Taking a photo from the Meta glasses."
+        case .understanding:
+            return "Sending speech and photo to Gemini."
+        case .ready:
+            return "Cart updated."
+        case .failed:
+            return glassesManager.statusText
         }
     }
 
@@ -218,6 +326,89 @@ struct CartView: View {
             result = try JSONDecoder().decode(ScanResult.self, from: data)
         } catch {
             result = nil
+        }
+    }
+
+    private func runVoiceScan() async {
+        workflowError = nil
+        scanPhase = .listening
+
+        do {
+            try await voiceManager.requestPermissions()
+            try voiceManager.startListening()
+            try await Task.sleep(nanoseconds: 4_000_000_000)
+            voiceManager.stopListening()
+
+            let voiceContext = voiceManager.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+            scanPhase = .capturing
+            let imageData = try await glassesManager.capturePhoto()
+
+            scanPhase = .understanding
+            let scanResult = try await scanClient.uploadScan(
+                imageData: imageData,
+                voiceContext: voiceContext.isEmpty ? nil : voiceContext
+            )
+            result = scanResult
+            scanPhase = scanResult.status == "ready" ? .ready : .failed
+            if let error = scanResult.error {
+                workflowError = error
+            }
+        } catch {
+            voiceManager.stopListening()
+            scanPhase = .failed
+            workflowError = error.localizedDescription
+        }
+    }
+}
+
+private enum ScanPhase {
+    case idle
+    case listening
+    case capturing
+    case understanding
+    case ready
+    case failed
+
+    var isBusy: Bool {
+        switch self {
+        case .listening, .capturing, .understanding:
+            return true
+        case .idle, .ready, .failed:
+            return false
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .idle:
+            return "Voice-guided scan"
+        case .listening:
+            return "Listening"
+        case .capturing:
+            return "Capturing"
+        case .understanding:
+            return "Understanding"
+        case .ready:
+            return "Cart ready"
+        case .failed:
+            return "Scan failed"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .idle:
+            return "sparkles"
+        case .listening:
+            return "waveform"
+        case .capturing:
+            return "camera.viewfinder"
+        case .understanding:
+            return "brain.head.profile"
+        case .ready:
+            return "checkmark.circle.fill"
+        case .failed:
+            return "exclamationmark.triangle.fill"
         }
     }
 }

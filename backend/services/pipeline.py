@@ -2,8 +2,16 @@ from models.schemas import Product, ScanResponse
 from services import ucp, vision
 
 
-async def run_scan(image_bytes: bytes, mime_type: str = "image/jpeg") -> ScanResponse:
-    vision_result = await vision.analyze_image_bytes(image_bytes, mime_type)
+async def run_scan(
+    image_bytes: bytes,
+    mime_type: str = "image/jpeg",
+    voice_context: str | None = None,
+) -> ScanResponse:
+    vision_result = await vision.analyze_image_bytes(
+        image_bytes,
+        mime_type,
+        voice_context=voice_context,
+    )
 
     query_precise = vision_result.get("query_precise") or ""
     query_broad = vision_result.get("query_broad") or ""
@@ -12,11 +20,12 @@ async def run_scan(image_bytes: bytes, mime_type: str = "image/jpeg") -> ScanRes
 
     # Recherche UCP : on tente la requête précise, puis on retombe sur la
     # requête large (sans marque / attributs incertains) si rien ne sort.
-    product: Product | None = await ucp.search_catalog(search_query)
-    if not product and query_broad and query_broad != search_query:
-        product = await ucp.search_catalog(query_broad)
+    products: list[Product] = await ucp.search_catalog(search_query)
+    if not products and query_broad and query_broad != search_query:
+        products = await ucp.search_catalog(query_broad)
         search_query = query_broad
 
+    product = products[0] if products else None
     if not product:
         return ScanResponse(
             status="error",

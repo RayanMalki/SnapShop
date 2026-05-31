@@ -15,8 +15,8 @@ import json
 import logging
 import uuid
 from typing import Any
-
-import httpx
+from urllib import error as urlerror
+from urllib import request as urlrequest
 
 from config import settings
 from models.schemas import Product
@@ -52,7 +52,7 @@ class MCPClient:
 
     def __init__(self, endpoint: str, *, timeout: float = 30.0) -> None:
         self.endpoint = endpoint
-        self._client = httpx.AsyncClient(timeout=timeout)
+        self.timeout = timeout
         self._next_id = 0
 
     def _make_id(self) -> int:
@@ -70,19 +70,12 @@ class MCPClient:
         }
         if params is not None:
             payload["params"] = params
-        resp = await self._client.post(
-            self.endpoint,
-            json=payload,
-            headers={
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-            },
-        )
+        resp_status, resp_text = await asyncio.to_thread(self._post_json, payload)
         try:
-            body = resp.json()
+            body = json.loads(resp_text)
         except json.JSONDecodeError as exc:
             raise RuntimeError(
-                f"MCP HTTP {resp.status_code}: non-JSON body: {resp.text[:300]}"
+                f"MCP HTTP {resp_status}: non-JSON body: {resp_text[:300]}"
             ) from exc
         if "error" in body:
             err = body["error"]
@@ -99,6 +92,25 @@ class MCPClient:
             "tools/call", {"name": name, "arguments": arguments}
         )
 
+    def _post_json(self, payload: dict[str, Any]) -> tuple[int, str]:
+        body = json.dumps(payload).encode("utf-8")
+        req = urlrequest.Request(
+            self.endpoint,
+            data=body,
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+        )
+        try:
+            with urlrequest.urlopen(req, timeout=self.timeout) as response:
+                text = response.read().decode("utf-8", errors="replace")
+                return response.status, text
+        except urlerror.HTTPError as exc:
+            text = exc.read().decode("utf-8", errors="replace")
+            return exc.code, text
+
     async def list_tools(
         self, profile_url: str | None = None
     ) -> dict[str, Any]:
@@ -112,7 +124,7 @@ class MCPClient:
         return await self._rpc("tools/list", params)
 
     async def close(self) -> None:
-        await self._client.aclose()
+        return None
 
     async def __aenter__(self) -> "MCPClient":
         return self

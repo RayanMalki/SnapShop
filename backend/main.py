@@ -1,7 +1,7 @@
 import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import BackgroundTasks, FastAPI, File, Header, HTTPException, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import get_cart, init_db, save_cart
@@ -44,6 +44,7 @@ async def health():
 async def scan(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
+    voice_context: str | None = Form(default=None),
     authorization: str | None = Header(default=None),
     async_mode: bool = False,
 ):
@@ -57,7 +58,7 @@ async def scan(
         _scan_jobs[job_id] = ScanResponse(status="processing")
 
         async def _process():
-            result = await run_scan(contents, mime_type)
+            result = await run_scan(contents, mime_type, voice_context=voice_context)
             _scan_jobs[job_id] = result
             if result.status == "ready":
                 await save_cart(user_id, result)
@@ -65,7 +66,7 @@ async def scan(
         background_tasks.add_task(_process)
         return ScanResponse(status="processing", cart_id=job_id)
 
-    result = await run_scan(contents, mime_type)
+    result = await run_scan(contents, mime_type, voice_context=voice_context)
     if result.status == "ready":
         await save_cart(user_id, result)
     return result

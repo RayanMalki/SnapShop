@@ -15,13 +15,19 @@ _MIME_BY_SUFFIX = {
 }
 
 PROMPT = """You are a product identification expert for a visual shopping assistant.
-The image shows ONE physical product (clothing, footwear, accessory, or
-consumer good). Extract every attribute that would help a shopper find
-THIS EXACT product on a global catalog.
+The image may show one or many physical products (clothing, footwear,
+accessories, or consumer goods). Extract every attribute that would help a
+shopper find the intended product on a global catalog.
 
 Rules:
-- If several products are visible, focus on the SINGLE most prominent /
-  centered / held one and ignore everything else.
+- If the user provided voice context, use it to choose the SINGLE target
+  product in the image. The voice context may be phrased naturally, such as
+  "find the baseball cap", "what shoes is that person wearing", or
+  "I like the green hoodie".
+- If the voice context is vague, infer the most likely matching product from
+  the instruction and visible products.
+- If no voice context is provided, focus on the SINGLE most prominent /
+  centered / held product and ignore everything else.
 - Describe ONLY the product itself. Never mention the person, hands, pose,
   background, location, lighting, or any other item in the scene.
 - "summary" = one short sentence about the product alone, starting with the
@@ -70,7 +76,23 @@ def _mime_for(image_path: Path) -> str:
     return _MIME_BY_SUFFIX.get(image_path.suffix.lower(), "image/jpeg")
 
 
-async def analyze_image_bytes(image_bytes: bytes, mime_type: str = "image/jpeg") -> dict:
+def _prompt_with_context(voice_context: str | None) -> str:
+    cleaned = (voice_context or "").strip()
+    if not cleaned:
+        return PROMPT + "\n\nVoice context: none provided."
+    return (
+        PROMPT
+        + "\n\nVoice context from the user. Use this to decide which visible "
+        + "product is the target, but do not copy uncertain words into the "
+        + f"catalog query unless the image supports them:\n{cleaned}"
+    )
+
+
+async def analyze_image_bytes(
+    image_bytes: bytes,
+    mime_type: str = "image/jpeg",
+    voice_context: str | None = None,
+) -> dict:
     """Analyse des bytes image en mémoire (depuis l'upload FastAPI)."""
     if not settings.gemini_api_key:
         return MOCK_VISION.model_dump()
@@ -85,7 +107,7 @@ async def analyze_image_bytes(image_bytes: bytes, mime_type: str = "image/jpeg")
             model=MODEL,
             contents=[
                 types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
-                PROMPT,
+                _prompt_with_context(voice_context),
             ],
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
