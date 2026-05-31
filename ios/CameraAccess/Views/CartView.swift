@@ -476,6 +476,11 @@ struct CartView: View {
             )
             result = scanResult
             scanPhase = scanResult.status == "ready" ? .ready : .failed
+            if scanResult.status == "ready", scanResult.product != nil {
+                await NotificationManager.shared.sendItemFoundNotification(
+                    productTitle: scanResult.product?.title
+                )
+            }
             if let error = scanResult.error {
                 workflowError = error
             }
