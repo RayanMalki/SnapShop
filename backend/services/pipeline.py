@@ -4,13 +4,24 @@ from models.schemas import Product, ScanResponse
 from services import ucp, vision
 
 
-async def run_scan(image_bytes: bytes, mime_type: str = "image/jpeg") -> ScanResponse:
-    vision_result = await vision.analyze_image_bytes(image_bytes, mime_type)
+async def run_scan(
+    image_bytes: bytes,
+    mime_type: str = "image/jpeg",
+    voice_context: str | None = None,
+) -> ScanResponse:
+    vision_result = await vision.analyze_image_bytes(
+        image_bytes,
+        mime_type,
+        voice_context=voice_context,
+    )
 
     query_precise = vision_result.get("query_precise") or ""
     query_broad = vision_result.get("query_broad") or ""
     search_query = query_precise or query_broad or "clothing item"
     summary = vision_result.get("summary") or search_query
+    search_intent = summary
+    if voice_context:
+        search_intent = f"{summary} User request: {voice_context.strip()}"
 
     # Distinct queries to fan out (precise + broad fallback), deduped.
     queries = [q for q in (query_precise, query_broad) if q]
@@ -21,7 +32,7 @@ async def run_scan(image_bytes: bytes, mime_type: str = "image/jpeg") -> ScanRes
     # "sometimes nothing good"). ships_to + currency remove the worst noise, and
     # price proximity is applied as a ranking signal instead.
     results = await asyncio.gather(
-        *(ucp.search_catalog(q, intent=summary) for q in queries)
+        *(ucp.search_catalog(q, intent=search_intent) for q in queries)
     )
     candidates = [c for group in results for c in group]
 

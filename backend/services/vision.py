@@ -51,11 +51,35 @@ Rules:
   other, null."""
 
 
+def _prompt_with_context(voice_context: str | None) -> str:
+    context = (voice_context or "").strip()
+    if not context:
+        return PROMPT
+
+    return (
+        PROMPT
+        + "\n\nVoice instruction from the user:\n"
+        + context
+        + "\n\nAdditional targeting rules:\n"
+        + "- The image may contain multiple visible products.\n"
+        + "- Use the voice instruction to decide which product is the target.\n"
+        + "- If the instruction names a product type, color, position, or wearer, "
+        "focus on the matching product even if another object is more prominent.\n"
+        + "- If the instruction is vague, infer the most likely shopping target "
+        "from the instruction and image.\n"
+        + "- Keep the output schema exactly the same."
+    )
+
+
 def _mime_for(image_path: Path) -> str:
     return _MIME_BY_SUFFIX.get(image_path.suffix.lower(), "image/jpeg")
 
 
-async def analyze_image_bytes(image_bytes: bytes, mime_type: str = "image/jpeg") -> dict:
+async def analyze_image_bytes(
+    image_bytes: bytes,
+    mime_type: str = "image/jpeg",
+    voice_context: str | None = None,
+) -> dict:
     """Analyse des bytes image en mémoire (depuis l'upload FastAPI)."""
     if not settings.gemini_api_key:
         raise RuntimeError("GEMINI_API_KEY is not configured")
@@ -69,7 +93,7 @@ async def analyze_image_bytes(image_bytes: bytes, mime_type: str = "image/jpeg")
         model=MODEL,
         contents=[
             types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
-            PROMPT,
+            _prompt_with_context(voice_context),
         ],
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
