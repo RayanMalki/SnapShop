@@ -54,7 +54,10 @@ Rules:
 - Use null when an attribute is not confidently visible. Never guess.
 - "brand" must come from a visible logo, tag, or printed text. Otherwise null.
 - "visible_text" captures any readable string on the product (logos,
-  model numbers, slogans, size tags). Empty list if none.
+  model names, model numbers, slogans, size tags). Preserve exact words,
+  numbers, spacing, and casing as much as possible. Use separate list items
+  for distinct strings. If a logo is recognizable but no text is readable,
+  set brand if confident, but do NOT invent visible_text. Empty list if none.
 - "distinguishing_features" = the form/construction cues that separate THIS
   item from other products of the SAME type — this is critical for ranking, so
   be specific and visual. Capture silhouette/shape, cut/fit, closure or
@@ -73,18 +76,21 @@ Rules:
   matching: a small front logo is a DIFFERENT product from a large or all-over
   print of the same brand. Null only if the product has no logo/graphic.
 - Colors must be common names ("navy blue", "burgundy", "off-white"), not hex.
-- "query_precise" = compact keyword string a shopper would type, ordered:
-  brand · gender · product_type · key_attributes (color, material, fit,
-  pattern). Use plain words that are likely to appear in a real product
-  TITLE; do NOT pack in long descriptive phrases (those go in
-  distinguishing_features, which is used for ranking, not search). No stop
-  words, no punctuation other than spaces, max 8 words. Lowercase.
+- "query_precise" = compact catalog search keywords likely to appear in a
+  product TITLE. Order: brand/model text if visible · product_type · color ·
+  most searchable material/style. Avoid gender unless the item is clearly
+  gender-specific and likely titled that way. Avoid vague words like stylish,
+  modern, casual, accessory, product. Do NOT pack in long descriptive phrases
+  (those go in distinguishing_features / graphic_detail, which are used for
+  ranking, not search). No stop words, no punctuation other than spaces, max
+  8 words. Lowercase.
 - "query_broad" = same but drop the brand and any attribute you are < 80%
   sure of, keeping just product_type + the 1-2 most certain attributes.
   Used as a fallback / recall booster.
-- "estimated_price_usd" = your best guess of typical retail price in USD for
-  an item that looks like this, as an integer. This drives a price filter,
-  so estimate carefully. Null only if you truly cannot tell.
+- "estimated_price_usd" = typical retail price in USD for an item like this,
+  as an integer, only when product type, brand, and material give enough
+  evidence. Use broad realistic retail, not resale/discount/marketplace price.
+  Return null for ambiguous generic items where price could vary widely.
 - "category" must be one of: apparel, footwear, accessory, electronics,
   home, beauty, other.
 - "gender" must be one of: men, women, unisex, kids, null.
@@ -106,6 +112,12 @@ def _prompt_with_context(voice_context: str | None) -> str:
         + "- Use the voice instruction to decide which product is the target.\n"
         + "- If the instruction names a product type, color, position, or wearer, "
         "focus on the matching product even if another object is more prominent.\n"
+        + "- Use the voice instruction to choose the target product, but do not "
+        "change visual attributes to match the instruction unless they are "
+        "visible in the image.\n"
+        + "- If the user asks for a variant not visible in the photo, keep the "
+        "photographed product attributes visual and let the voice request remain "
+        "contextual.\n"
         + "- If the instruction is vague, infer the most likely shopping target "
         "from the instruction and image.\n"
         + "- Keep the output schema exactly the same."
