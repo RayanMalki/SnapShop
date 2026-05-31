@@ -27,7 +27,10 @@ class Settings(BaseSettings):
 
     @property
     def upload_path(self) -> Path:
-        return Path(self.upload_dir)
+        path = Path(self.upload_dir)
+        if not path.is_absolute():
+            return BACKEND_DIR / path
+        return path
 
 
 settings = Settings()

@@ -3,10 +3,18 @@ from pathlib import Path
 
 import aiosqlite
 
-from config import settings
+from config import BACKEND_DIR, settings
 from models.schemas import ScanResponse
 
-DB_PATH = Path(settings.database_url.replace("sqlite:///", ""))
+
+def _sqlite_path(database_url: str) -> Path:
+    path = Path(database_url.replace("sqlite:///", ""))
+    if not path.is_absolute():
+        return BACKEND_DIR / path
+    return path
+
+
+DB_PATH = _sqlite_path(settings.database_url)
 
 
 async def init_db() -> None:

@@ -71,7 +71,9 @@ struct CartView: View {
             .padding(.horizontal, 20)
             .padding(.top, 24)
         }
-        .task { await loadCart() }
+        .task {
+            await loadCart()
+        }
     }
 
     private var header: some View {
@@ -346,6 +348,11 @@ struct CartView: View {
             )
             result = scanResult
             scanPhase = scanResult.status == "ready" ? .ready : .failed
+            if scanResult.status == "ready", scanResult.product != nil {
+                await NotificationManager.shared.sendItemFoundNotification(
+                    productTitle: scanResult.product?.title
+                )
+            }
             if let error = scanResult.error {
                 workflowError = error
             }

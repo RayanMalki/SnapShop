@@ -29,10 +29,10 @@ Plan complet : [HACKATHON_PLAN.md](./HACKATHON_PLAN.md)
 
 ```bash
 git clone <url-du-repo> SnapShop
-cd SnapShop/backend
+cd SnapShop
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r backend/requirements.txt
 ```
 
 ### 2. Configurer la clé Gemini
@@ -40,7 +40,6 @@ pip install -r requirements.txt
 Le `.env` se met **à la racine du repo** (pas dans `backend/`).
 
 ```bash
-cd ..                  # revenir à la racine
 cp .env.example .env
 ```
 
@@ -56,12 +55,18 @@ Ouvre **2 terminaux**.
 ### Terminal 1 — Backend (port 8000)
 
 ```bash
-cd backend
-source .venv/bin/activate
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+./start-backend.sh
 ```
 
 Les logs (vision, UCP, erreurs) s'affichent ici en direct.
+
+Par défaut, le backend tourne sans auto-reload pour éviter les boucles de
+redémarrage pendant les scans. Si tu modifies le code backend et veux le reload
+automatique :
+
+```bash
+RELOAD=1 ./start-backend.sh
+```
 
 ### Terminal 2 — Frontend (port 8080)
 

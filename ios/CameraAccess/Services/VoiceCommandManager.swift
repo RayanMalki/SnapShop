@@ -20,15 +20,18 @@ final class VoiceCommandManager: ObservableObject {
 
     /// Prefer the device language, then French, then English.
     private static func bestAvailableRecognizer() -> SFSpeechRecognizer? {
-        let candidates = [
-            Locale.preferredLanguages.first,
-            Locale.current.identifier,
+        var candidates: [String] = [
             "fr-FR",
             "fr_CA",
             "en-US",
             "en-GB",
         ]
-        .compactMap { $0 }
+        if !Locale.current.identifier.isEmpty {
+            candidates.insert(Locale.current.identifier, at: 0)
+        }
+        if let preferred = Locale.preferredLanguages.first, !preferred.isEmpty {
+            candidates.insert(preferred, at: 0)
+        }
 
         var seen = Set<String>()
         for id in candidates {
