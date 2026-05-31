@@ -83,6 +83,14 @@ class ScanResponse(BaseModel):
         default=False,
         description="True when the match is unverified or below the confidence threshold",
     )
+    match_quality: Literal["exact", "similar"] = Field(
+        default="similar",
+        description=(
+            "'exact' = reranker confirmed this is the same product as the photo "
+            "with high confidence. 'similar' = no exact match in any store; "
+            "product + alternatives are the closest look-alikes."
+        ),
+    )
     alternatives: list[Product] = Field(
         default_factory=list,
         description="Other strong matches (best first) so the UI can offer options",

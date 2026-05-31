@@ -57,11 +57,17 @@ Rules:
   model numbers, slogans, size tags). Empty list if none.
 - "distinguishing_features" = the form/construction cues that separate THIS
   item from other products of the SAME type — this is critical for ranking, so
-  be specific and visual. Capture silhouette/shape, cut/fit, closure or
-  fastening, and part-specific style:
+  be specific and visual. For WHATEVER the product is, capture its silhouette/
+  shape, its distinct PARTS, closure/fastening, materials, and the per-part
+  colorway (the color of each major part, not just the dominant one).
+  The examples below show the LEVEL OF DETAIL expected — apply the SAME kind of
+  thinking to ANY product type (electronics, watches, bottles, furniture, etc.),
+  not only the ones listed:
   - cap: crown structure (structured vs unstructured/dad cap) + brim shape
     (flat vs curved) + back closure (fitted, snapback, strapback, elastic).
-  - shoe: high-top vs low-top, sole/outsole style, lacing.
+  - shoe: high-top vs low-top, toe shape, sole/outsole style, lacing, AND the
+    per-part colorway (upper color, sole/midsole color, and any swoosh/stripe/
+    accent color) — e.g. "white upper", "gum sole", "black swoosh".
   - bag: tote vs crossbody vs backpack, strap type, closure, pockets.
   - apparel: neckline, sleeve length, fit (slim/oversized), hood, zip vs pullover.
   Use short phrases (e.g. "flat brim", "snapback closure", "structured high
@@ -190,6 +196,13 @@ How to judge (in priority order):
    - A clearly different colorway is a WORSE match even when brand and model
      are identical. Light gray / silver / stainless is NOT dark gray / shadow /
      black; navy is not royal blue or teal; etc.
+   - FOOTWEAR especially: a sneaker's colorway is multi-tone — match the WHOLE
+     scheme (upper, toe, midsole/sole, laces, and any swoosh/stripes/accent),
+     not just the dominant color. A different colorway of the SAME silhouette is
+     NOT the same product: e.g. all-black is NOT white/black; "Panda" (black/
+     white) is NOT "UNC" (blue/white); a gum sole is NOT a white sole; a black
+     swoosh is NOT a red swoosh. If the upper, sole, or accent colors differ
+     from the photo, it is at best a SIMILAR match (confidence < 0.5), not exact.
    - Allow for lighting and white-balance differences, but a fundamentally
      different color family is a mismatch.
 5. Quantity & packaging. The shopper wants a SINGLE unit like the one in the
@@ -200,12 +213,18 @@ How to judge (in priority order):
    only", "Replacement Lid", "Lid Combo") unless the photo is of just that
    accessory. A single-unit listing of the right product BEATS a multipack of
    the same product.
-6. Logo / graphic SCALE and PLACEMENT. Match how the logo or print looks, not
-   just that one exists. Use the TARGET "logo/graphic" note and the photo.
-   A small logo in a specific spot (e.g. centered on a beanie's front fold, or
-   a left-chest mark) is a DIFFERENT product from a large, oversized, or
-   all-over print of the same brand. Wrong logo size or position is a WORSE
-   match even with the same brand and color.
+6. Logo / graphic SCALE, PLACEMENT, and COLOR. Match how the logo or print
+   looks, not just that one exists. Use the TARGET "logo/graphic" note and
+   compare BOTH images directly.
+   - A small logo in a specific spot (e.g. centered on a beanie's front fold, or
+     a left-chest mark) is a DIFFERENT product from a large, oversized, or
+     all-over print of the same brand.
+   - The logo / emblem COLOR is distinguishing: a WHITE swoosh is NOT a black
+     swoosh; a tonal/same-color logo is NOT a contrasting logo. Compare the logo
+     color you SEE in the photo against the candidate IMAGE (don't rely on the
+     text alone — small logos are easy to misread, so trust the pixels).
+   - Wrong logo size, position, OR color is a WORSE match even with the same
+     brand and garment color, and must keep confidence BELOW the exact range.
 7. Other visual attributes: material, pattern, capacity, and any remaining
    distinguishing features.
 8. Ignore background, angle, watermarks, and image quality. Judge the product
@@ -213,24 +232,29 @@ How to judge (in priority order):
 9. Price is a weak tiebreaker only.
 
 Output:
-- "ranking": candidate numbers from best to worst. OMIT candidates that are a
-  clearly different product (wrong type, brand, or construction). Among same
-  brand+model candidates, put the SINGLE unit whose CONSTRUCTION and COLOR match
-  the photo first; push wrong-style, wrong-color, and multipack/bundle variants
-  toward the end.
-- "best_index": the single best candidate number, or -1 if NONE plausibly
-  match. Prefer the single-unit variant that matches both construction and
-  color; only fall back to a multipack or mismatched variant of the right model
-  if nothing better exists, and lower confidence accordingly.
-- "confidence": 0..1 that best_index matches the photo in product, construction,
-  AND color. Calibrate honestly:
+- "ranking": ALWAYS order the candidates from CLOSEST to least close to the
+  photo, best first — even when NONE is an exact match. This is the "closest
+  look-alike" list the app shows when there's no exact match, so it MUST be
+  populated whenever there are same-type candidates. Order by: construction/
+  silhouette, then COLOR (a wrong-color variant of the right item is still far
+  closer than a different item), then logo, then other attributes. A wrong-color
+  but same-type item belongs in the ranking (just lower) — do NOT drop it. Only
+  OMIT a candidate that is a clearly different product TYPE (a bag when the photo
+  is a hoodie, earbuds vs headphones). Push multipacks/bundles toward the end.
+- "best_index": the single closest candidate number, or -1 ONLY if not one
+  candidate is even the same product type.
+- "confidence": 0..1 that best_index is the EXACT same product as the photo —
+  same model AND color AND logo — judged INDEPENDENTLY of the ranking. This is
+  what tells the app "exact" vs "similar", so be strict and honest:
+  - A right-type look-alike with a different COLOR, logo, or construction is a
+    SIMILAR match, not exact: keep confidence LOW (< 0.5) even if it tops the
+    ranking. The shopper photographed a red hoodie; a black one of the same
+    model is the closest similar item but is NOT an exact match.
   - If the TARGET has NO brand, you are matching by APPEARANCE alone. Reserve
     high confidence (> 0.8) for a candidate that is visually near-identical in
-    form, size, and layout — not merely the same category. A loose
-    "same general type" resemblance is LOW confidence (< 0.4), even if titles
-    share keywords.
-  - It is correct and useful to return best_index = -1 with low confidence when
-    nothing in the list actually looks like the photo. Do not force a match.
+    form, size, color, and layout — not merely the same category.
+  - Always rank the closest item even when confidence is low. Populate the
+    ranking; use confidence (not an empty ranking) to signal "no exact match".
 - "reason": one short sentence naming the matched construction/style, color,
   and logo scale/placement when relevant."""
 

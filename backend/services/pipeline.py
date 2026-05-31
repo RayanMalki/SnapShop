@@ -196,9 +196,14 @@ async def run_scan(
     # Unverified (no rerank / no key / weak match) => flag so the UI can hedge.
     low_confidence = confidence is None or confidence < settings.rerank_confidence_threshold
 
+    # Exact only when the reranker is confident it's the SAME product (model +
+    # color + logo). Otherwise the top candidate is the closest look-alike that
+    # the reranker ordered by visual similarity -> "similar".
+    match_quality = "exact" if not low_confidence else "similar"
+
     product: Product | None = candidates[0].product if candidates else None
-    # A few runner-up matches so the UI can offer alternatives when the top pick
-    # is wrong or low-confidence (common for brand-less / ambiguous items).
+    # Always surface a few runner-ups (even on an exact match) so the shopper can
+    # compare / pick a closer color or cheaper seller.
     alternatives = [c.product for c in candidates[1:5]] if product else []
 
     if not product:
@@ -230,6 +235,7 @@ async def run_scan(
                 confidence=confidence,
                 match_reason=match_reason,
                 low_confidence=low_confidence,
+                match_quality=match_quality,
                 alternatives=alternatives,
                 error="Could not build a checkout link for this product",
             )
@@ -245,5 +251,6 @@ async def run_scan(
         confidence=confidence,
         match_reason=match_reason,
         low_confidence=low_confidence,
+        match_quality=match_quality,
         alternatives=alternatives,
     )

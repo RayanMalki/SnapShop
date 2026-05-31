@@ -57,8 +57,41 @@ function renderResult(data) {
   const p = data.product;
   const price = (p.price_min / 100).toFixed(2);
   const siteUrl = p.merchant_url || (p.merchant_domain ? `https://${p.merchant_domain}` : "");
+  const isSimilar = (data.match_quality || "similar") !== "exact";
+
+  // On ne félicite pas quand c'est exact (silence = confiance). On n'alerte que
+  // lorsqu'on n'est PAS certain du match.
+  const banner = isSimilar
+    ? `<div style="background:#3b2f1a;border:1px solid #a16207;color:#fde68a;padding:.6rem .8rem;border-radius:8px;margin-bottom:.9rem;font-size:.85rem;line-height:1.35;">
+         ⚠️ <strong>On n'est pas certain que ce soit exactement ton produit.</strong><br/>Voici le résultat le plus proche trouvé.
+       </div>`
+    : "";
+
+  const alts = (data.alternatives || [])
+    .map((a) => {
+      const ap = (a.price_min / 100).toFixed(2);
+      const aurl = a.checkout_url || a.merchant_url || (a.merchant_domain ? `https://${a.merchant_domain}` : "#");
+      return `
+        <a href="${aurl}" target="_blank" rel="noopener" style="display:flex;gap:.6rem;align-items:center;padding:.45rem;border-radius:8px;text-decoration:none;color:inherit;background:#1f1f23;">
+          <img src="${a.image_url}" alt="" style="width:42px;height:42px;border-radius:6px;object-fit:cover;float:none;margin:0;" />
+          <span style="flex:1;min-width:0;">
+            <span style="display:block;font-size:.8rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${a.title}</span>
+            <span style="display:block;font-size:.75rem;color:#a1a1aa;">$${ap} ${a.currency} · ${a.merchant_domain}</span>
+          </span>
+        </a>`;
+    })
+    .join("");
+
+  const altsBlock = alts
+    ? `<div style="margin-top:1rem;">
+         <div style="font-size:.8rem;color:#a1a1aa;margin-bottom:.45rem;">${isSimilar ? "Autres résultats similaires" : "Alternatives"}</div>
+         <div style="display:flex;flex-direction:column;gap:.4rem;">${alts}</div>
+       </div>`
+    : "";
+
   resultBody.className = "";
   resultBody.innerHTML = `
+    ${banner}
     <img src="${p.image_url}" alt="" />
     <strong>${p.title}</strong><br />
     <span>$${price} ${p.currency}</span><br />
@@ -69,6 +102,7 @@ function renderResult(data) {
       ${data.continue_url ? `<a class="store" href="${data.continue_url}" target="_blank" rel="noopener">Checkout →</a>` : ""}
       ${siteUrl ? `<a class="site" href="${siteUrl}" target="_blank" rel="noopener">Visit site →</a>` : ""}
     </div>
+    ${altsBlock}
   `;
 }
 

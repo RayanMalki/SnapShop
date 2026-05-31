@@ -20,8 +20,10 @@ class Settings(BaseSettings):
     # extra round-trip (which base64-encodes the whole photo) is wasted. Off by
     # default; flip on once a `like`-capable endpoint/profile is in use.
     ucp_like_search_enabled: bool = False
-    # Reranker confidence below this flags the match as low_confidence.
-    rerank_confidence_threshold: float = 0.5
+    # Reranker confidence below this flags the match as low_confidence (=> the UI
+    # hedges with "not sure"). Higher = stricter "exact", fewer false-confident
+    # silent matches. 0.6 favors honesty over claiming exactness.
+    rerank_confidence_threshold: float = 0.6
     database_url: str = f"sqlite:///{BACKEND_DIR / 'data' / 'snapshop.db'}"
     upload_dir: str = str(BACKEND_DIR / "uploads")
 

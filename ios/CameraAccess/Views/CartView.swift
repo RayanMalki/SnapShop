@@ -7,6 +7,15 @@ struct CartProduct: Codable {
     let currency: String
     let imageUrl: String
     let merchantDomain: String
+    let merchantUrl: String?
+    let checkoutUrl: String?
+
+    /// Best link to open for this product (alternatives have no continue_url).
+    var bestURL: URL? {
+        let candidate = checkoutUrl ?? merchantUrl
+            ?? (merchantDomain.isEmpty ? nil : "https://\(merchantDomain)")
+        return candidate.flatMap(URL.init(string:))
+    }
 
     enum CodingKeys: String, CodingKey {
         case variantId = "variant_id"
@@ -15,6 +24,8 @@ struct CartProduct: Codable {
         case currency
         case imageUrl = "image_url"
         case merchantDomain = "merchant_domain"
+        case merchantUrl = "merchant_url"
+        case checkoutUrl = "checkout_url"
     }
 }
 
@@ -24,6 +35,13 @@ struct ScanResult: Codable {
     let product: CartProduct?
     let continueUrl: String?
     let error: String?
+    let matchQuality: String?      // "exact" | "similar"
+    let matchReason: String?
+    let confidence: Double?
+    let lowConfidence: Bool?
+    let alternatives: [CartProduct]?
+
+    var isSimilarOnly: Bool { (matchQuality ?? "similar") != "exact" }
 
     enum CodingKeys: String, CodingKey {
         case status
@@ -31,6 +49,11 @@ struct ScanResult: Codable {
         case product
         case continueUrl = "continue_url"
         case error
+        case matchQuality = "match_quality"
+        case matchReason = "match_reason"
+        case confidence
+        case lowConfidence = "low_confidence"
+        case alternatives
     }
 }
 
@@ -61,7 +84,15 @@ struct CartView: View {
                     loadingCard
                 } else if let product = result?.product, let urlString = result?.continueUrl,
                           let url = URL(string: urlString) {
-                    productCard(product: product, url: url)
+                    VStack(spacing: 14) {
+                        if result?.isSimilarOnly == true {
+                            similarBanner
+                        }
+                        productCard(product: product, url: url)
+                        if let alts = result?.alternatives, !alts.isEmpty {
+                            alternativesList(alts, similar: result?.isSimilarOnly == true)
+                        }
+                    }
                 } else {
                     emptyCard
                 }
@@ -226,6 +257,80 @@ struct CartView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    private var similarBanner: some View {
+        GlassPanel {
+            HStack(spacing: 12) {
+                Image(systemName: "exclamationmark.magnifyingglass")
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(.orange)
+                    .frame(width: 30)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Not sure this is your exact product")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(AeroTheme.deepGreen)
+                    Text("Here is the closest match we found.")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(AeroTheme.deepGreen.opacity(0.7))
+                }
+                Spacer(minLength: 4)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func alternativesList(_ items: [CartProduct], similar: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(similar ? "Autres résultats similaires" : "Autres options")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(AeroTheme.deepGreen.opacity(0.65))
+                .padding(.leading, 4)
+
+            ForEach(items.indices, id: \.self) { i in
+                alternativeRow(items[i])
+            }
+        }
+    }
+
+    private func alternativeRow(_ product: CartProduct) -> some View {
+        Button {
+            if let url = product.bestURL { openURL(url) }
+        } label: {
+            HStack(spacing: 12) {
+                AsyncImage(url: URL(string: product.imageUrl)) { image in
+                    image.resizable().scaledToFill()
+                } placeholder: {
+                    Color.white.opacity(0.6)
+                }
+                .frame(width: 48, height: 48)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(product.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AeroTheme.deepGreen)
+                        .lineLimit(2)
+                    Text(product.merchantDomain)
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(AeroTheme.deepGreen.opacity(0.55))
+                }
+
+                Spacer(minLength: 6)
+
+                Text(priceString(product))
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(AeroTheme.deepGreen)
+                    .lineLimit(1)
+            }
+            .padding(10)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color.white.opacity(0.45))
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     private func productCard(product: CartProduct, url: URL) -> some View {
