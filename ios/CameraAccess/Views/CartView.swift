@@ -197,7 +197,7 @@ struct CartView: View {
         case .idle:
             return glassesManager.statusText
         case .listening:
-            return "Speak naturally, e.g. find the green hoodie."
+            return "Parle naturellement, ex. « la tuque noire » ou « the green hoodie »."
         case .capturing:
             return "Taking a photo from the Meta glasses."
         case .understanding:
@@ -335,11 +335,7 @@ struct CartView: View {
 
         do {
             try await voiceManager.requestPermissions()
-            try voiceManager.startListening()
-            try await Task.sleep(nanoseconds: 4_000_000_000)
-            voiceManager.stopListening()
-
-            let voiceContext = voiceManager.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+            let voiceContext = try await voiceManager.listenFor(maxSeconds: 7)
             scanPhase = .capturing
             let imageData = try await glassesManager.capturePhoto()
 

@@ -1,7 +1,29 @@
+import asyncio
+import logging
+from dataclasses import dataclass
 from pathlib import Path
 
+import httpx
+
 from config import settings
+from models.schemas import RerankVerdict
 from models.schemas import VisionAttributes as VisionResult
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class RerankOutcome:
+    """Result of a Gemini rerank: the new order plus the model's self-assessment.
+
+    ``order`` is original candidate indices, best first (may be empty if the
+    model judged nothing a match). ``confidence``/``reason`` let the caller flag
+    or explain weak matches instead of presenting them as certain.
+    """
+
+    order: list[int]
+    confidence: float
+    reason: str
 
 MODEL = "gemini-2.5-flash"
 
@@ -25,12 +47,31 @@ Rules:
 - Describe ONLY the product itself. Never mention the person, hands, pose,
   background, location, lighting, or any other item in the scene.
 - "summary" = one short sentence about the product alone, starting with the
-  product (e.g. "Gray ThermoFlask stainless steel water bottle."), NOT
-  "A person holding...".
+  product and INCLUDING its style/construction and, when present, the SIZE and
+  PLACEMENT of any logo/graphic (e.g. "Black beanie with a small white logo
+  centered on the front fold.", "Navy snapback cap with a flat brim and white
+  NY logo."), NOT "A person holding...".
 - Use null when an attribute is not confidently visible. Never guess.
 - "brand" must come from a visible logo, tag, or printed text. Otherwise null.
 - "visible_text" captures any readable string on the product (logos,
   model numbers, slogans, size tags). Empty list if none.
+- "distinguishing_features" = the form/construction cues that separate THIS
+  item from other products of the SAME type — this is critical for ranking, so
+  be specific and visual. Capture silhouette/shape, cut/fit, closure or
+  fastening, and part-specific style:
+  - cap: crown structure (structured vs unstructured/dad cap) + brim shape
+    (flat vs curved) + back closure (fitted, snapback, strapback, elastic).
+  - shoe: high-top vs low-top, sole/outsole style, lacing.
+  - bag: tote vs crossbody vs backpack, strap type, closure, pockets.
+  - apparel: neckline, sleeve length, fit (slim/oversized), hood, zip vs pullover.
+  Use short phrases (e.g. "flat brim", "snapback closure", "structured high
+  crown"). Empty list only if the item is truly featureless.
+- "graphic_detail" = if the product shows a logo, print, or graphic, describe
+  its SIZE relative to the product and its PLACEMENT precisely (e.g. "small
+  embroidered logo centered on the front fold", "left-chest logo about 4 cm
+  wide", "large graphic covering most of the front"). This matters for
+  matching: a small front logo is a DIFFERENT product from a large or all-over
+  print of the same brand. Null only if the product has no logo/graphic.
 - Colors must be common names ("navy blue", "burgundy", "off-white"), not hex.
 - "query_precise" = compact keyword string a shopper would type, ordered:
   brand · gender · product_type · key_attributes (color, material, fit,
@@ -113,4 +154,204 @@ async def analyze_image(image_path: Path) -> dict:
     return await analyze_image_bytes(
         image_path.read_bytes(),
         mime_type=_mime_for(image_path),
+    )
+
+
+RERANK_INSTRUCTIONS = """You are the final, authoritative matcher for a visual
+shopping assistant. You are given:
+1. A TARGET spec describing the product a shopper photographed (may include a
+   "user voice request" line — honor it when choosing among similar candidates).
+2. The shopper's REFERENCE PHOTO.
+3. A numbered list of catalog CANDIDATES, each with its title, price, and image.
+
+Decide which candidates are the SAME product the shopper photographed, then
+rank them from best to worst match.
+
+How to judge (in priority order):
+1. Same product TYPE. Never match across types (a backpack is not a handbag,
+   headphones are not earbuds).
+2. Same brand AND same model/style. Use the TARGET brand and any visible
+   text/logos, and read the candidate TITLES — a brand or model name in the
+   title is strong evidence. A different brand is strong evidence AGAINST.
+3. Same CONSTRUCTION / silhouette / style / layout. Match the form factor, not
+   just the type. Use the TARGET distinguishing features and the photo's shape.
+   Among the same type, a different construction is a WORSE match. Examples:
+   a snapback is NOT a fitted or dad cap; a flat brim is NOT a curved brim;
+   a high-top is NOT a low-top; a tote is NOT a crossbody; a pullover is NOT
+   a full-zip; a compact column-staggered split mechanical keyboard is NOT a
+   full-size membrane keyboard that merely has a center gap; a 60% board is NOT
+   a full-size board. Match SIZE/layout and mechanism, not just buzzwords like
+   "split" or "ergonomic". Read style words in candidate TITLES too.
+4. Same COLORWAY / finish. DECISIVE when several candidates are the same brand
+   and model in different colors: the shopper wants the exact color in the photo.
+   - Compare the candidate IMAGE color and any color words in its TITLE
+     (e.g. "Shadow", "Black", "Stone Blue", "Sea Glass", "Stainless",
+     "Charcoal", "Navy") against the photo and the TARGET color.
+   - A clearly different colorway is a WORSE match even when brand and model
+     are identical. Light gray / silver / stainless is NOT dark gray / shadow /
+     black; navy is not royal blue or teal; etc.
+   - Allow for lighting and white-balance differences, but a fundamentally
+     different color family is a mismatch.
+5. Quantity & packaging. The shopper wants a SINGLE unit like the one in the
+   photo. Strongly demote multipacks and bundles — titles containing "2 Pack",
+   "3-Pack", "(2 Pack)", "Set of", "Bundle", "Combo", "Variety", "Value Pack",
+   or images showing several units — UNLESS the photo clearly shows multiple
+   items. Also demote accessory-only or replacement-part listings (e.g. "Lid
+   only", "Replacement Lid", "Lid Combo") unless the photo is of just that
+   accessory. A single-unit listing of the right product BEATS a multipack of
+   the same product.
+6. Logo / graphic SCALE and PLACEMENT. Match how the logo or print looks, not
+   just that one exists. Use the TARGET "logo/graphic" note and the photo.
+   A small logo in a specific spot (e.g. centered on a beanie's front fold, or
+   a left-chest mark) is a DIFFERENT product from a large, oversized, or
+   all-over print of the same brand. Wrong logo size or position is a WORSE
+   match even with the same brand and color.
+7. Other visual attributes: material, pattern, capacity, and any remaining
+   distinguishing features.
+8. Ignore background, angle, watermarks, and image quality. Judge the product
+   itself, not the photo.
+9. Price is a weak tiebreaker only.
+
+Output:
+- "ranking": candidate numbers from best to worst. OMIT candidates that are a
+  clearly different product (wrong type, brand, or construction). Among same
+  brand+model candidates, put the SINGLE unit whose CONSTRUCTION and COLOR match
+  the photo first; push wrong-style, wrong-color, and multipack/bundle variants
+  toward the end.
+- "best_index": the single best candidate number, or -1 if NONE plausibly
+  match. Prefer the single-unit variant that matches both construction and
+  color; only fall back to a multipack or mismatched variant of the right model
+  if nothing better exists, and lower confidence accordingly.
+- "confidence": 0..1 that best_index matches the photo in product, construction,
+  AND color. Calibrate honestly:
+  - If the TARGET has NO brand, you are matching by APPEARANCE alone. Reserve
+    high confidence (> 0.8) for a candidate that is visually near-identical in
+    form, size, and layout — not merely the same category. A loose
+    "same general type" resemblance is LOW confidence (< 0.4), even if titles
+    share keywords.
+  - It is correct and useful to return best_index = -1 with low confidence when
+    nothing in the list actually looks like the photo. Do not force a match.
+- "reason": one short sentence naming the matched construction/style, color,
+  and logo scale/placement when relevant."""
+
+_MAX_RERANK_IMAGE_BYTES = 6_000_000
+
+
+async def _fetch_image(client: httpx.AsyncClient, url: str) -> tuple[bytes, str] | None:
+    if not url or "placehold" in url:
+        return None
+    try:
+        resp = await client.get(url, follow_redirects=True)
+        resp.raise_for_status()
+    except Exception:
+        logger.info("visual rerank: failed to fetch %s", url)
+        return None
+    data = resp.content
+    if not data or len(data) > _MAX_RERANK_IMAGE_BYTES:
+        return None
+    content_type = (resp.headers.get("content-type") or "image/jpeg").split(";")[0]
+    if not content_type.startswith("image/"):
+        content_type = "image/jpeg"
+    return data, content_type
+
+
+async def rerank_candidates(
+    image_bytes: bytes,
+    candidates: list[dict],
+    target: str,
+    mime_type: str = "image/jpeg",
+) -> RerankOutcome | None:
+    """Re-rank catalog candidates against the scanned photo using Gemini.
+
+    ``candidates`` is a list of dicts with ``title``, ``price`` (display
+    string), and ``image_url``. ``target`` is a text spec of what the shopper
+    photographed (built from the vision attributes).
+
+    Returns a :class:`RerankOutcome` whose ``order`` holds original indices
+    (into ``candidates``) best match first, with clear non-matches dropped — or
+    ``None`` when the rerank can't be performed at all (no key, no fetchable
+    images, or the model call fails), in which case the caller should keep its
+    existing order. When the model responds but matches nothing, ``order`` is
+    empty and ``confidence`` is low.
+    """
+    if not settings.gemini_api_key or not candidates:
+        return None
+
+    urls = [c.get("image_url") or "" for c in candidates]
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        fetched = await asyncio.gather(*(_fetch_image(client, url) for url in urls))
+
+    # Map the number shown to Gemini -> original candidate index. Images that
+    # fail to download are dropped, so the presented numbering is dense.
+    kept: list[tuple[int, bytes, str]] = []
+    for orig_idx, item in enumerate(fetched):
+        if item is not None:
+            data, content_type = item
+            kept.append((orig_idx, data, content_type))
+    if not kept:
+        return None
+
+    from google import genai
+    from google.genai import types
+
+    genai_client = genai.Client(api_key=settings.gemini_api_key)
+
+    parts: list[object] = [
+        RERANK_INSTRUCTIONS,
+        f"TARGET spec:\n{target}",
+        "REFERENCE PHOTO:",
+        types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+        "CANDIDATES:",
+    ]
+    for shown_idx, (orig_idx, data, content_type) in enumerate(kept):
+        c = candidates[orig_idx]
+        label = f"Candidate {shown_idx}: {c.get('title') or 'Untitled'}"
+        price = c.get("price")
+        if price:
+            label += f" — {price}"
+        parts.append(label)
+        parts.append(types.Part.from_bytes(data=data, mime_type=content_type))
+
+    try:
+        response = await genai_client.aio.models.generate_content(
+            model=MODEL,
+            contents=parts,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=RerankVerdict,
+                temperature=0.0,
+            ),
+        )
+    except Exception:
+        logger.exception("visual rerank: Gemini call failed")
+        return None
+
+    verdict: RerankVerdict | None = response.parsed
+    if verdict is None:
+        return None
+
+    # Translate the model's candidate numbers back to original indices, keeping
+    # the model's order, de-duping, and ignoring out-of-range noise.
+    order: list[int] = []
+    seen: set[int] = set()
+    shown_numbers = list(verdict.ranking)
+    if verdict.best_index >= 0:
+        shown_numbers = [verdict.best_index, *shown_numbers]
+    for shown in shown_numbers:
+        if 0 <= shown < len(kept):
+            orig_idx = kept[shown][0]
+            if orig_idx not in seen:
+                seen.add(orig_idx)
+                order.append(orig_idx)
+
+    logger.info(
+        "visual rerank: confidence=%.2f reason=%s order=%s",
+        verdict.confidence,
+        verdict.reason,
+        order,
+    )
+    return RerankOutcome(
+        order=order,
+        confidence=float(verdict.confidence or 0.0),
+        reason=verdict.reason or "",
     )

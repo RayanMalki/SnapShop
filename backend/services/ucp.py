@@ -36,6 +36,14 @@ def _agent_profile_url() -> str:
     return settings.ucp_agent_profile_url or DEFAULT_AGENT_PROFILE_URL
 
 
+class UCPSearchError(RuntimeError):
+    """Raised when a catalog search fails at the transport/RPC level.
+
+    Distinct from "search succeeded but returned no products" so callers can
+    tell a service outage apart from a genuine no-match.
+    """
+
+
 # ---------------------------------------------------------------------------
 # Minimal MCP Streamable HTTP client
 # ---------------------------------------------------------------------------
@@ -213,9 +221,9 @@ async def search_catalog(
     try:
         async with MCPClient(CATALOG_MCP_URL) as client:
             result = await client.call_tool("search_catalog", arguments)
-    except Exception:
+    except Exception as exc:
         logger.exception("UCP search_catalog failed for %r", query)
-        return []
+        raise UCPSearchError(f"catalog search failed for {query!r}: {exc}") from exc
 
     candidates = _parse_candidates(result)
     if not candidates:
@@ -298,8 +306,16 @@ def rank_candidates(
         if not c.product.image_url or "placehold" in c.product.image_url:
             score -= 3.0
 
+        # A scanned photo is a single item; keep multipacks/bundles out of the
+        # shortlist's top slots so a single unit survives to the reranker.
+        if is_multipack(c.product.title):
+            score -= 4.0
+
+        # Price proximity only makes sense in a single currency: the estimate is
+        # USD, so comparing raw minor units of PKR/CAD/etc. is meaningless. Leave
+        # proximity neutral (0) for non-USD candidates rather than fabricating it.
         proximity = 0.0
-        if has_est and c.price_cents > 0:
+        if has_est and c.price_cents > 0 and c.currency == "USD":
             ratio = c.price_cents / (est * 100.0)
             if ratio > 0:
                 proximity = max(0.0, 1.0 - abs(math.log(ratio)))
@@ -404,6 +420,38 @@ def _tokens(text: str) -> list[str]:
 
 def _normalize_title(title: str) -> str:
     return " ".join(_tokens(title))
+
+
+_MULTIPACK_RE = re.compile(
+    r"\b(\d+)\s*-?\s*(?:pack|pk|count|ct|pieces?|pcs)\b"
+    r"|\b(?:pack|set|lot)\s+of\s+(\d+)\b",
+    re.IGNORECASE,
+)
+_BUNDLE_RE = re.compile(
+    r"\b(?:bundle|combo|multi-?pack|twin\s*pack|value\s*pack|variety\s*pack"
+    r"|family\s*pack|\d+\s*pcs)\b",
+    re.IGNORECASE,
+)
+
+
+def is_multipack(title: str) -> bool:
+    """True when a title sells more than one unit (2-pack, set of 3, bundle…).
+
+    Used to keep single units ahead of multipacks: a scanned photo is almost
+    always a single item, so a pack of the right product is the wrong result.
+    """
+    if not title:
+        return False
+    if _BUNDLE_RE.search(title):
+        return True
+    for match in _MULTIPACK_RE.finditer(title):
+        number = match.group(1) or match.group(2)
+        try:
+            if int(number) >= 2:
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
 
 
 def _product_from_raw(raw: dict[str, Any]) -> Product | None:
