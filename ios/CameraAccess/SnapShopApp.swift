@@ -79,8 +79,6 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
 
 @main
 struct SnapShopApp: App {
-    @State private var didCompleteOnboarding = false
-
     init() {
         // Configure the Meta Wearables SDK BEFORE any view/StateObject (e.g.
         // CartView's MetaGlassesManager) accesses Wearables.
@@ -95,13 +93,7 @@ struct SnapShopApp: App {
 
     var body: some Scene {
         WindowGroup {
-            Group {
-                if !didCompleteOnboarding {
-                    OnboardingView(didCompleteOnboarding: $didCompleteOnboarding)
-                } else {
-                    CartView()
-                }
-            }
+            CartView()
             .font(SnapShopTheme.bodyFont(size: 16))
             .preferredColorScheme(.light)
             .tint(SnapShopTheme.purple)

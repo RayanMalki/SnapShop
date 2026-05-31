@@ -35,8 +35,15 @@ struct AeroBackground: View {
     var animatedBubbles = false
 
     var body: some View {
-        Color.white
-            .ignoresSafeArea()
+        ZStack {
+            Color.white
+            Image("WelcomeProducts")
+                .resizable()
+                .scaledToFill()
+                .allowsHitTesting(false)
+            Color.white.opacity(0.3)
+        }
+        .ignoresSafeArea()
     }
 }
 

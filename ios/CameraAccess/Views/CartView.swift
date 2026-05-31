@@ -102,7 +102,7 @@ struct CartView: View {
                     }
                 }
                 .padding(.horizontal, 20)
-                .padding(.top, 8)
+                .padding(.top, 32)
                 .padding(.bottom, 40)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -546,23 +546,39 @@ struct MyCartView: View {
     @ObservedObject private var cart = CartStore.shared
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                AeroBackground().ignoresSafeArea()
+        ZStack {
+            Color.white.ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("My Cart")
+                        .font(SnapShopTheme.displayFont(size: 36))
+                        .foregroundStyle(SnapShopTheme.purple)
+
+                    Spacer()
+
+                    Button("Done") { dismiss() }
+                        .font(SnapShopTheme.actionFont(size: 17))
+                        .foregroundStyle(SnapShopTheme.purple)
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 24)
+                .padding(.bottom, 10)
 
                 if cart.items.isEmpty {
+                    Spacer()
                     VStack(spacing: 10) {
                         Image(systemName: "cart")
                             .font(.largeTitle)
-                            .foregroundStyle(AeroTheme.leaf)
+                            .foregroundStyle(SnapShopTheme.purple)
                         Text("Your cart is empty")
                             .font(.title3.bold())
-                            .foregroundStyle(AeroTheme.deepGreen)
+                            .foregroundStyle(SnapShopTheme.ink)
                         Text("Scan a product to add it here.")
                             .font(.callout)
-                            .foregroundStyle(AeroTheme.deepGreen.opacity(0.7))
+                            .foregroundStyle(SnapShopTheme.secondaryInk)
                     }
-                    .padding(40)
+                    Spacer()
                 } else {
                     List {
                         ForEach(cart.items) { product in
@@ -580,13 +596,6 @@ struct MyCartView: View {
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
-                }
-            }
-            .navigationTitle("My Cart")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
-                        .foregroundStyle(SnapShopTheme.purple)
                 }
             }
         }

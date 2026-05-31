@@ -55,20 +55,6 @@
         color: #f4f4f5;
         margin-top: 0.25rem;
       }
-      #authBar input {
-        flex: 1;
-        min-width: 120px;
-        padding: 0.5rem;
-        border-radius: 6px;
-        border: 1px solid #3f3f46;
-        background: #18181b;
-        color: #f4f4f5;
-        margin: 0;
-      }
-      #userLabel { flex: 1; align-self: center; color: #a1a1aa; font-size: 0.9rem; }
-      #history { margin-top: 1rem; padding: 1rem; border-radius: 12px; background: #18181b; }
-      .histRow { display: flex; gap: 0.6rem; align-items: center; padding: 0.45rem; border-radius: 8px; background: #1f1f23; text-decoration: none; color: inherit; margin-bottom: 0.4rem; }
-      .histRow img { width: 44px; height: 44px; border-radius: 6px; object-fit: cover; }
     </style>
   </head>
   <body>
@@ -77,20 +63,6 @@
 
     <label for="apiBase">API base URL</label>
     <input type="text" id="apiBase" value="http://localhost:8000" />
-
-    <div id="authBar" style="margin: 1rem 0;">
-      <div id="loggedOut" class="row">
-        <input type="email" id="email" placeholder="Email" />
-        <input type="password" id="password" placeholder="Password" />
-        <button id="signinBtn" type="button">Sign in</button>
-        <button id="signupBtn" type="button" class="secondary">Sign up</button>
-      </div>
-      <div id="loggedIn" class="row" hidden>
-        <span id="userLabel"></span>
-        <button id="findsBtn" type="button" class="secondary">My finds</button>
-        <button id="logoutBtn" type="button" class="secondary">Logout</button>
-      </div>
-    </div>
 
     <video id="video" autoplay playsinline muted></video>
     <canvas id="canvas" hidden></canvas>
@@ -104,11 +76,6 @@
 
     <div id="result">
       <div id="resultBody" class="skeleton">Scanning…</div>
-    </div>
-
-    <div id="history" hidden>
-      <strong>My finds</strong>
-      <div id="historyBody" style="margin-top: 0.6rem; color: #a1a1aa;"></div>
     </div>
 
     <script src="app.js"></script>
