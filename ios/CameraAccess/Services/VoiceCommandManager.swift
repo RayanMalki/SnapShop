@@ -6,6 +6,8 @@ import Speech
 final class VoiceCommandManager: ObservableObject {
     @Published private(set) var transcript = ""
     @Published private(set) var isListening = false
+    @Published private(set) var audioInputName = "iPhone microphone"
+    @Published private(set) var isUsingGlassesMicrophone = false
 
     private var recognizer: SFSpeechRecognizer?
     private let audioEngine = AVAudioEngine()
@@ -92,6 +94,7 @@ final class VoiceCommandManager: ObservableObject {
 
     private func startListeningInternal(recognizer: SFSpeechRecognizer) throws {
         transcript = ""
+        try configureAudioInput()
 
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
@@ -124,6 +127,57 @@ final class VoiceCommandManager: ObservableObject {
         }
     }
 
+    /// Route speech capture through the glasses' Bluetooth HFP microphone when
+    /// it is available. Meta exposes microphone audio through the normal iOS
+    /// audio route rather than through MWDATCamera.
+    private func configureAudioInput() throws {
+        let session = AVAudioSession.sharedInstance()
+
+        do {
+            try session.setCategory(
+                .playAndRecord,
+                mode: .voiceChat,
+                options: [.allowBluetoothHFP]
+            )
+            try session.setActive(true)
+
+            let availableInputs = session.availableInputs ?? []
+            let hfpInputs = availableInputs.filter { $0.portType == .bluetoothHFP }
+            let namedGlassesInput = hfpInputs.first { Self.looksLikeMetaGlasses($0.portName) }
+            // Some firmware/iOS combinations expose a generic HFP name. It is
+            // safe to select it when it is the only Bluetooth microphone.
+            let glassesInput = namedGlassesInput ?? (hfpInputs.count == 1 ? hfpInputs[0] : nil)
+
+            if let glassesInput {
+                try session.setPreferredInput(glassesInput)
+                audioInputName = glassesInput.portName
+                isUsingGlassesMicrophone = true
+                return
+            }
+
+            // Keep voice scan usable when the glasses audio profile is not
+            // connected, while making the fallback explicit to the UI.
+            if let builtInMic = availableInputs.first(where: { $0.portType == .builtInMic }) {
+                try session.setPreferredInput(builtInMic)
+                audioInputName = builtInMic.portName
+            } else {
+                try session.setPreferredInput(nil)
+                audioInputName = session.currentRoute.inputs.first?.portName ?? "iPhone microphone"
+            }
+            isUsingGlassesMicrophone = false
+        } catch {
+            throw VoiceCommandError.audioSessionConfigurationFailed(error.localizedDescription)
+        }
+    }
+
+    private static func looksLikeMetaGlasses(_ portName: String) -> Bool {
+        let name = portName.lowercased()
+        return name.contains("ray-ban")
+            || name.contains("rayban")
+            || name.contains("meta")
+            || name.contains("oakley")
+    }
+
     private func finishListening(with text: String) async {
         listenTimeoutTask?.cancel()
         listenTimeoutTask = nil
@@ -147,6 +201,10 @@ final class VoiceCommandManager: ObservableObject {
         recognitionTask?.cancel()
         recognitionTask = nil
         isListening = false
+        try? AVAudioSession.sharedInstance().setActive(
+            false,
+            options: .notifyOthersOnDeactivation
+        )
     }
 }
 
@@ -154,6 +212,7 @@ enum VoiceCommandError: LocalizedError {
     case speechPermissionDenied
     case microphonePermissionDenied
     case recognizerUnavailable
+    case audioSessionConfigurationFailed(String)
 
     var errorDescription: String? {
         switch self {
@@ -163,6 +222,8 @@ enum VoiceCommandError: LocalizedError {
             return "Allow microphone access in Settings."
         case .recognizerUnavailable:
             return "Speech recognition isn't available."
+        case .audioSessionConfigurationFailed(let message):
+            return "Could not use the glasses microphone. Details: \(message)"
         }
     }
 }
