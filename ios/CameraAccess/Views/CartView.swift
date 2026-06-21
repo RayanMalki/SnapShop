@@ -245,7 +245,7 @@ struct CartView: View {
         case .idle:
             return glassesManager.statusText
         case .listening:
-            return "Parle naturellement, ex. « la tuque noire » ou « the green hoodie »."
+            return "Listening through \(voiceManager.audioInputName). Describe the item naturally."
         case .capturing:
             return "Taking a photo from the Meta glasses."
         case .understanding:

@@ -20,8 +20,12 @@ final class MetaGlassesManager: ObservableObject {
     private var stream: MWDATCamera.Stream?
     private var stateListenerToken: AnyListenerToken?
     private var errorListenerToken: AnyListenerToken?
+    private var videoFrameListenerToken: AnyListenerToken?
     private var photoDataListenerToken: AnyListenerToken?
     private var photoContinuation: CheckedContinuation<Data, Error>?
+    private var latestVideoFrameJPEG: Data?
+    private var lastVideoFrameJPEGAt = Date.distantPast
+    private let photoCaptureTimeoutNanoseconds: UInt64 = 12_000_000_000
     #endif
 
     init() {
@@ -56,13 +60,29 @@ final class MetaGlassesManager: ObservableObject {
 
     func registerWithMetaAI() async {
         #if canImport(MWDATCore)
+        if Wearables.shared.registrationState == .registered {
+            needsRegistration = false
+            handleDevices(Wearables.shared.devices)
+            return
+        }
+
         do {
             statusText = "Opening Meta AI registration"
             try await Wearables.shared.startRegistration()
         } catch let error as RegistrationError {
-            statusText = "Registration failed: \(error.description)"
+            if error.description.localizedCaseInsensitiveContains("already registered") {
+                needsRegistration = false
+                handleDevices(Wearables.shared.devices)
+            } else {
+                statusText = "Registration failed: \(error.description)"
+            }
         } catch {
-            statusText = "Registration failed: \(error.localizedDescription)"
+            if error.localizedDescription.localizedCaseInsensitiveContains("already registered") {
+                needsRegistration = false
+                handleDevices(Wearables.shared.devices)
+            } else {
+                statusText = "Registration failed: \(error.localizedDescription)"
+            }
         }
         #else
         statusText = "Meta DAT SDK is not linked"
@@ -78,11 +98,34 @@ final class MetaGlassesManager: ObservableObject {
 
         statusText = "Capturing from glasses"
         return try await withCheckedThrowingContinuation { continuation in
+            if let existingContinuation = photoContinuation {
+                existingContinuation.resume(throwing: MetaGlassesError.captureFailed)
+            }
             photoContinuation = continuation
             let didStart = stream.capturePhoto(format: .jpeg)
             if !didStart {
                 photoContinuation = nil
                 continuation.resume(throwing: MetaGlassesError.captureFailed)
+                return
+            }
+
+            let timeout = photoCaptureTimeoutNanoseconds
+            Task { [weak self] in
+                guard let self else { return }
+                try? await Task.sleep(nanoseconds: timeout)
+                await MainActor.run {
+                    guard let pendingContinuation = self.photoContinuation else {
+                        return
+                    }
+                    self.photoContinuation = nil
+                    if let fallbackFrame = self.latestVideoFrameJPEG {
+                        self.statusText = "Using glasses video frame"
+                        pendingContinuation.resume(returning: fallbackFrame)
+                    } else {
+                        self.statusText = "Photo capture timed out"
+                        pendingContinuation.resume(throwing: MetaGlassesError.captureTimeout)
+                    }
+                }
             }
         }
         #else
@@ -95,6 +138,8 @@ final class MetaGlassesManager: ObservableObject {
         let activeStream = stream
         stream = nil
         clearListeners()
+        latestVideoFrameJPEG = nil
+        lastVideoFrameJPEGAt = .distantPast
         isStreaming = false
         statusText = "Glasses stream stopped"
         await activeStream?.stop()
@@ -154,6 +199,9 @@ final class MetaGlassesManager: ObservableObject {
             throw MetaGlassesError.registrationRequired
         }
 
+        let selector = AutoDeviceSelector(wearables: wearables)
+        try await waitForActiveDevice(using: selector)
+
         statusText = "Checking camera permission"
         let permissionStatus: PermissionStatus
         do {
@@ -175,7 +223,7 @@ final class MetaGlassesManager: ObservableObject {
         }
 
         statusText = "Looking for eligible glasses"
-        let session = try await startedDeviceSession()
+        let session = try await startedDeviceSession(using: selector)
 
         let config = StreamConfiguration(
             videoCodec: VideoCodec.raw,
@@ -192,16 +240,18 @@ final class MetaGlassesManager: ObservableObject {
         await newStream.start()
         try await Task.sleep(nanoseconds: 1_500_000_000)
         isStreaming = newStream.state == .streaming
-        statusText = isStreaming ? "Glasses ready" : "Waiting for glasses camera"
+        if isStreaming {
+            statusText = "Glasses ready"
+        } else {
+            statusText = "Waiting for glasses camera"
+            throw MetaGlassesError.streamTimeout
+        }
     }
 
-    private func startedDeviceSession() async throws -> DeviceSession {
+    private func startedDeviceSession(using selector: AutoDeviceSelector) async throws -> DeviceSession {
         if let deviceSession, deviceSession.state == .started {
             return deviceSession
         }
-
-        let selector = AutoDeviceSelector(wearables: wearables)
-        try await waitForActiveDevice(using: selector)
 
         let session: DeviceSession
         do {
@@ -280,18 +330,56 @@ final class MetaGlassesManager: ObservableObject {
 
         stateListenerToken = stream.statePublisher.listen { [weak self] state in
             Task { @MainActor in
-                self?.isStreaming = state == .streaming
+                guard let self else { return }
+                self.isStreaming = state == .streaming
                 if state == .streaming {
-                    self?.statusText = "Glasses ready"
+                    self.statusText = "Glasses ready"
+                } else if state == .stopped || state == .stopping {
+                    self.stream = nil
+                    self.isStreaming = false
+                    if let pendingContinuation = self.photoContinuation {
+                        self.photoContinuation = nil
+                        if let fallbackFrame = self.latestVideoFrameJPEG {
+                            self.statusText = "Using glasses video frame"
+                            pendingContinuation.resume(returning: fallbackFrame)
+                        } else {
+                            self.statusText = "Glasses stream stopped"
+                            pendingContinuation.resume(throwing: MetaGlassesError.streamTimeout)
+                        }
+                    }
                 }
             }
         }
 
         errorListenerToken = stream.errorPublisher.listen { [weak self] error in
             Task { @MainActor in
-                self?.statusText = error.localizedDescription
-                self?.photoContinuation?.resume(throwing: error)
-                self?.photoContinuation = nil
+                guard let self else { return }
+                self.statusText = error.localizedDescription
+                if let pendingContinuation = self.photoContinuation {
+                    self.photoContinuation = nil
+                    if let fallbackFrame = self.latestVideoFrameJPEG {
+                        self.statusText = "Using glasses video frame"
+                        pendingContinuation.resume(returning: fallbackFrame)
+                    } else {
+                        pendingContinuation.resume(throwing: error)
+                    }
+                }
+                self.stream = nil
+                self.isStreaming = false
+            }
+        }
+
+        videoFrameListenerToken = stream.videoFramePublisher.listen { [weak self] frame in
+            let image = frame.makeUIImage()
+            let data = image?.jpegData(compressionQuality: 0.9)
+            Task { @MainActor in
+                guard let self, let data else { return }
+                let now = Date()
+                guard now.timeIntervalSince(self.lastVideoFrameJPEGAt) >= 0.75 else {
+                    return
+                }
+                self.latestVideoFrameJPEG = data
+                self.lastVideoFrameJPEGAt = now
             }
         }
 
@@ -307,6 +395,7 @@ final class MetaGlassesManager: ObservableObject {
     private func clearListeners() {
         stateListenerToken = nil
         errorListenerToken = nil
+        videoFrameListenerToken = nil
         photoDataListenerToken = nil
     }
     #endif
@@ -322,6 +411,7 @@ enum MetaGlassesError: LocalizedError {
     case sessionFailed
     case streamUnavailable
     case streamTimeout
+    case captureTimeout
     case captureFailed
 
     var errorDescription: String? {
@@ -344,6 +434,8 @@ enum MetaGlassesError: LocalizedError {
             return "The glasses camera stream is unavailable."
         case .streamTimeout:
             return "The glasses camera did not start in time."
+        case .captureTimeout:
+            return "The glasses did not return a photo. Make sure the glasses are awake, keep the app open, then try Voice scan again."
         case .captureFailed:
             return "The glasses did not capture a photo."
         }
